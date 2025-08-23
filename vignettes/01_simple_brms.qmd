@@ -1,0 +1,27 @@
+---
+title: "ITPC ~ exponent: a minimal hierarchical BRMS example"
+format:
+    html: 
+       embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r}
+library(targets)
+library(here)
+
+
+has_store <- dir.exists(here::here("_targets"))
+
+if (has_store) {
+  store <- here::here("_targets")
+df  <- targets::tar_read(analysis_df,        store = store)
+fit <- targets::tar_read(fit_itpc_exponent,  store = store)
+pp  <- targets::tar_read(ppcheck_png,        store = store)
+} else {
+  # Rendered by hand: use absolute, project-rooted paths
+  print("Targets need to be run")}
+```

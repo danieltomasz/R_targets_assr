@@ -1,0 +1,13 @@
+_targets/
+.Rproj.user
+.Rhistory
+.RData
+.Rcache/
+fits/
+.vscode/
+.DS_Store
+**.rds
+fits/
+/.quarto/
+_output/
+**.Rproj
