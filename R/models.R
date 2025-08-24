@@ -1,50 +1,32 @@
-# R/models.R
-
-fit_brms_spectral <- function(df, model_suffix = "default") {
-  res <- itpc_resources()
-  
-  brms::brm(
-    formula = exponent ~ 1 + (1 | subject) + (1 | roi),
-    data = df,
-    family = student(),
-    chains = res$chains,
-    cores = res$cores,
-    threads = res$threads,
-    iter = 4000,
-    warmup = 1000,
-    control = list(adapt_delta = 0.95),
-    file = here::here("fits", paste0("model_spectral_", model_suffix)),
-    file_refit = "on_change"
-  )
-}
-
-# dont change if not needed to avaid recomputing
-fit_brms_itpc_exponent <- function(df) {
-  set.seed(2025)
-  
-  # auto-allocate resources: keep threads ~= physical cores
-  n_phys  <- max(1, parallel::detectCores(logical = FALSE))
-  # Favor between-chain first; then add modest within-chain threading
-  n_chains <- min(4, n_phys)                 # up to 4 chains, but not more than cores
-  tpc      <- max(1, floor(n_phys / n_chains))  # threads per chain
-  
-  df_stim <- dplyr::filter(df, S == "stim")
-  
-  brms::brm(
-    itpc ~ 1 + exponent +
-      (1 + exponent | roi) +
-      (1 + exponent | subject),
-    data     = df_stim,
+# Generic BRMS saver -----------------------------------------------------------
+fit_brms_generic <- function(
+    df,
+    formula,
+    file_stem,
     family   = brms::student(),
-    backend  = "cmdstanr",
-    chains   = n_chains,
-    cores    = n_chains,                    # chains run in parallel
-    threads  = brms::threading(tpc),        # within-chain threads
-    iter     = 2000, warmup = 1000,
+    iter     = 4000,
+    warmup   = 1000,
     control  = list(adapt_delta = 0.95),
-    # caching compiled model
-    file     = "fits/itpc_exponent",
-    file_refit = "on_change"
+    backend  = "cmdstanr",
+    ...
+) {
+  res <- itpc_resources()  # expects $chains, $cores, $threads
+  dir.create(here::here("fits"), recursive = TRUE, showWarnings = FALSE)
+  
+  brms::brm(
+    formula = formula,
+    data    = df,
+    family  = family,
+    backend = backend,
+    chains  = res$chains,
+    cores   = res$cores,
+    threads = res$threads,     # keep this consistent with your itpc_resources()
+    iter    = iter,
+    warmup  = warmup,
+    control = control,
+    file    = here::here("fits", file_stem),
+    file_refit = "on_change",
+    ...
   )
 }
 

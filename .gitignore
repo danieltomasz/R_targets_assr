@@ -11,3 +11,10 @@ fits/
 /.quarto/
 _output/
 **.Rproj
+**.png
+figures/*.csv
+derived/
+
+#dont ignore static figuress
+!figures/static/
+_archive/

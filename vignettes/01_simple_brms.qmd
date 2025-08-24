@@ -17,15 +17,15 @@ execute:
 
 library(targets)
 library(here)
+targets::tar_source() # sources all R/*.R and tracks them for invalidation
 
 
 has_store <- dir.exists(here::here("_targets"))
 
 if (has_store) {
   store <- here::here("_targets")
-df  <- targets::tar_read(analysis_df,        store = store)
-fit <- targets::tar_read(fit_itpc_exponent,  store = store)
-pp  <- targets::tar_read(ppcheck_png,        store = store)
+model_pt_stim <- targets::tar_read(model_pt_stim,        store = store)
+
 } else {
   # Rendered by hand: use absolute, project-rooted paths
   print("Targets need to be run")}
@@ -46,11 +46,10 @@ The experiment used a within-subjects design to investigate cortical gamma-band 
 
 ::: {#fig-factors}
 
-![](figures/ch04-1-factors.png){ fig-scap='Experimental design'}
+![](figures/static/ch04-1-factors.png){ fig-scap='Experimental design'}
 
 Design of the orginal experiment. Source: [@pellegrino2019TranscranialDirectCurrent]
 :::
-
 
 Each session included two blocks corresponding to conditions related to the time (P) of applying tDCS stimulation: PRE (before tDCS) and POST (after tDCS). @fig-sound2 shows the structure of a paradigm used to induce 40 Hz synchrony during a single block. Each block consisted of 180 repetitions lasting 2 s each. Each trial included 1 s of pause (S=PRESTIM condition) followed by a 40 Hz amplitude-modulated (AM) tone (S=STIM condition), so that the stimulus onset asynchrony was 2 s. Each block lasted a total of 6 minutes (180 trials × 2 seconds).
 @fig-sound1 illustrates the auditory stimulus, an amplitude modulated tone with the following parameters: carrier frequency = 1,000 Hz and amplitude modulating frequency = 40 Hz. 
@@ -59,10 +58,10 @@ Each session included two blocks corresponding to conditions related to the time
 ::: {#fig-signal layout-ncol=2}
 
 
-![Structure of the trial.](figures/experimental_protocol_sound2.png){#fig-sound2}
+![Structure of the trial.](figures/static/experimental_protocol_sound2.png){#fig-sound2}
 
 
-![ Carrier and amplitude modulation.](figures/experimental_protocol_sound1.png){#fig-sound1}
+![ Carrier and amplitude modulation.](figures/static/experimental_protocol_sound1.png){#fig-sound1}
 
 
 Structure of auditory stimulation. Adapted from @pellegrino2019TranscranialDirectCurrent.
@@ -91,6 +90,22 @@ I am interested into the if the ITPC is different for  the
 We looked into simple model where and how much  ASSR change ITPC.
 My assumption is that the  effect of  sound  stimulation will be dependent both from the `Subject` and `ROI` grouping variables (@barr2013RandomEffectsStructure argues for maximal structure of model being conservative)
 $$  ITPC \sim  1+  S + (1+ S|ROI) + (1 + S|Subject)$$
+
+
+```{r}
+
+# Visualize region-specific P×T interaction effects
+interaction_plot <- create_brain_plot(
+  fit = model_pt_stim,
+  parameter = "Ppost:Treal",  # This is the P×T interaction term
+  filltype = "RdBu",  # Red-blue diverging palette centered at zero
+  filter_significant = TRUE,  # Only show regions with strong evidence
+  title = "tDCS × Time Interaction Effects on ITPC",
+  filename = "itpc_interaction_effects",
+  width = 12, height = 8
+)
+```
+
 
 
 # Results

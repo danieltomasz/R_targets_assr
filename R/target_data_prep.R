@@ -35,18 +35,32 @@ make_analysis_df <- function(itpc_path, spec_path) {
   itpc <- readr::read_csv(itpc_path, show_col_types = FALSE) |>
     dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) |>
     dplyr::mutate(
-      S  = dplyr::case_when(type == "prestim_itpc" ~ "prestim",
-                            type == "stim_itpc"    ~ "stim",
-                            TRUE ~ type),
+      S = dplyr::case_when(
+        type == "prestim_itpc" ~ "prestim",
+        type == "stim_itpc" ~ "stim",
+        TRUE ~ type
+      ),
       itpc = value
     ) |>
-    dplyr::select(subject, roi, P, T, S, itpc)
-  
+    dplyr::select(subject, roi, P, T, S, itpc) |>
+    dplyr::distinct()
+
   spec <- readr::read_csv(spec_path, show_col_types = FALSE) |>
-    dplyr::select(subject, roi, P, T, condition, exponent) |>
-    dplyr::rename(S = condition)
-  
-  dplyr::inner_join(itpc, spec, by = c("subject", "roi", "P", "T", "S")) |>
+    dplyr::select(subject, roi, P, T, condition, exponent, offset) |>
+    dplyr::rename(S = condition) |>
+    dplyr::distinct()
+
+  out <- dplyr::inner_join(itpc, spec, by = c("subject", "roi", "P", "T", "S"))
+
+  # sanity check: no duplicates after join
+  post_dups <- out |>
+    dplyr::count(subject, roi, P, T, S, name = "n") |>
+    dplyr::filter(n > 1)
+  if (nrow(post_dups) > 0) {
+    stop("Join produced duplicates. Your inputs are still not unique on (subject, roi, P, T, S). Fix upstream.")
+  }
+
+  out |>
     dplyr::mutate(
       subject = factor(subject),
       roi     = factor(roi),
