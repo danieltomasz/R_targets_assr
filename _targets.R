@@ -15,6 +15,18 @@ list(
 
   # Join and prepare one tidy table for modeling
   tar_target(analysis_df, make_analysis_df(itpc_csv, spec_csv)),
+  # save intermediate df
+  tar_target(
+    analysis_df_csv,
+    {
+      dir.create("derived", recursive = TRUE, showWarnings = FALSE)
+      path <- file.path("derived", "analysis_df.csv")
+      readr::write_csv(analysis_df, path)
+      path  # <- return the path so targets can track it
+    },
+    format = "file",
+    cue = tar_cue(mode = "thorough")  # rebuild when inputs change
+  ),
 
   # One hierarchical model (fast-ish settings to begin with)
   tar_target(

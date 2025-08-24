@@ -1,4 +1,36 @@
 # R/data_prep.R
+
+
+#' Join ITPC and spectral-exponent data for modeling
+#'
+#' Reads two CSVs and builds a tidy table keyed by `subject`, `roi`, `P`, `T`, `S`.
+#'
+#' @details
+#' **Inclusion/Exclusion logic**
+#' - Keeps only ITPC rows where `type` is one of `"prestim_itpc"` or `"stim_itpc"`.
+#' - Maps `type` → `S` as: `"prestim_itpc"` → `"prestim"`, `"stim_itpc"` → `"stim"`.
+#' - In spectral params, renames `condition` to `S` and requires `S` to match the ITPC side.
+#' - Uses an inner join on `c(subject, roi, P, T, S)`; rows missing on either side are dropped.
+#'
+#' @section Output shape:
+#' A tibble with one row per `(subject, roi, P, T, S)` and columns:
+#' - `subject` (factor), `roi` (factor)
+#' - `P`, `T`
+#' - `S` (factor with levels `c("prestim","stim")`)
+#' - `itpc` (numeric), `exponent` (numeric)
+#'
+#' @param itpc_path Path to ITPC CSV with columns `subject, roi, P, T, type, value`.
+#' @param spec_path Path to spectral-params CSV with columns `subject, roi, P, T, condition, exponent`.
+#' @return A tibble ready for hierarchical modeling (e.g., with **brms**), containing only `prestim`/`stim` conditions and matched keys across sources.
+#'
+#' @examples
+#' \dontrun{
+#' df <- make_analysis_df(
+#'   "data/Destrieux_final_itpc.csv",
+#'   "data/specparam_all.csv"
+#' )
+#' }
+#' @export
 make_analysis_df <- function(itpc_path, spec_path) {
   itpc <- readr::read_csv(itpc_path, show_col_types = FALSE) |>
     dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) |>

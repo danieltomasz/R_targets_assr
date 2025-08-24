@@ -1,0 +1,118 @@
+## Resting state
+
+> [!NOTE]
+> 
+> Comment
+> 
+> I will probaly move the resting state part out of article
+
+We have access to 5min resting state each condition for each subject. <!-- //to verify --> We computed the values of the exponent and offset for each region and presented them in the @fig-brain-plot-rs.
+
+::: {#fig-brain-plot-rs}
+![](figures/brain_plot_rs.png)
+
+Mean values of exponent and offset averaged for the trials before tDCS stimulation and before sound stimulation
+:::
+
+We wanted to extract the parametrisation in the resting state and then use this to see how this will interact within the spectral stimulation. The spatial aspect of analysis is interesting
+
+In first part of analysis, cortical gamma synchrony was computed in MEG only before tDCS stimulation.
+
+
+##  RBA and quantyfying the effect of sound stimulation on single variable
+
+In the first part I want to to compare  PRE-REAL and PRE-SHAM if there are any systematic differences between  those conditions that should theoretically be equivalent.
+
+The models checking the differences will have the form
+$$
+Variable_{ T:real, S:prestim} - Variable_{T:sham, S:prestim} \sim 1 + (1 | roi) + (1 + subject)
+$$
+
+and
+$$
+Variable_{ T:real, S:stim} - Variable_{T:sham, S:stim} \sim 1 + (1 | roi) + (1 + subject)
+$$
+
+
+Also, after combining T:real and T:sham when P:PRE MEG I would like to compute  the basic topographical maps of the variables computing the maps of the specparam variables in the baseline  (or all  4 points together?)
+
+$$
+Variable_{\text{S:prestim}} \sim 1 + (1 | roi) + (1 + subject)
+$$
+
+
+After checking if  the is no systematic difference , I  want to quantify impact on sound stimulation on variables using RBA by fitting the model on the differences  between conditions.
+
+
+$$
+Variable_{S:stim} - Variable_{S:prestim} \sim 1 + (1 | roi) + (1 + subject)
+$$
+
+
+for  variable being ITPC, Exponent and Offset.
+
+
+The alternative to `RBA` would be to  implement the model directly in `brms` with the form 
+$$ Variable \sim  1+ S + (1 + S| roi) +   (1 + S| subject) $$, but I we started out initial analysis with RBA  contrast  based approach, as it give more straightworward interpretation and we can easily retrieve P+. 
+
+<!-- 
+###  Mixed Effects Model (or bayesian hierarchical multilevel models)
+
+the the difference of the $ITPC_{stim} - ITPC_{nostim}$ (  baseline corrected ITPC) was used in the further analysis, producing an estimate of regional map. Z-scoring  (dividing by the SD of the  pre-stimulation period) were not feasible due to low variability of the  pre-stimulation period.
+
+## RBA analysis -->
+
+
+###  Answering main question 
+
+To answer my main question, wheter the spectral slope (exponent) of  MEG (neural activity) predict inter-trial phase coherence at 40 Hz during auditory steady-state response, and how does this predictive relationship vary across different cortical regions,  I would like to focus on mainly the  S=stimulus condition, to steamline the analysis and enhance interpetability.
+
+
+The following  set of   models in `brms` would be 
+
+
+\begin{align}
+    ITPC_{s:stim} &\sim 1 + (1|ROI) + (1|Subject) \tag{1} \\
+    ITPC_{s:stim} &\sim Exponent_{s:stim} + (1 + Exponent_{s:stim} | ROI) + (1 + Exponent_{s:stim} | Subject) \tag{2} \\
+    ITPC_{s:stim} &\sim Offset + (1 + Offset | ROI) + (1 + Offset | Subject) \tag{3}
+\end{align}
+
+<!-- $$
+ITPC_{S:stim}  \sim  1 + (1 |ROI) + (1 |Subject)
+$$
+
+$$
+ITPC_{S:stim}  \sim  Exponent_{S:stim}  + (1 + Exponent_{S:stim} | ROI) + (1 + Exponent_{S:stim}  | Subject),
+$$
+
+
+$$
+ITPC_{S:stim}  \sim  Offset + (1 + Offset | ROI) + (1 + Offset  | Subject),
+$$ -->
+
+And the model with both spectral parameter 
+
+$$
+  ITPC_{S:stim}  \sim Offset + Exponent + (1 + Offset + Exponent |ROI) + (1 + Offset + Exponent|Subject),
+$$
+
+
+Potential  addotional model would to use   values of spectral parametrisation  extracted from resting state session recording conducted before the exporiment. 
+
+For the the interpretation 
+
+- I would look  for each cortical region  extracting the region specific coefficient
+- Create brain maps showing the spatial distribution of effects
+- Highlight regions with P+ > 0.95 or P+ < 0.05 (strong evidence for an effect)
+
+For model comparison I would use LOOIC (Leave-One-Out Information Criterion) or WAIC criterion
+
+###  tDCS Modulation Effects
+
+To  amswer the questiopm wheter bi-hemispheric tDCS modulate neural responses to auditory stimulation, I will try to fit the following model
+
+$$
+ITPC_{\text{diff}} \sim 1 + T  + (1|ROI) + (1|Subject)
+$$
+
+Where   ITPC_diff  is  POST-PRE difference scores

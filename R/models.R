@@ -1,4 +1,28 @@
 # R/models.R
+
+fit_brms_spectral <- function(df) {
+  res <- itpc_resources()  # res$chains, res$cores, res$threads
+  
+  model_spectral_0 <- brm(
+    formula = exponent ~ 1 + (1 | subject) + (1 | roi),
+    data = df,
+    # Student's t distribution to handle potential outliers
+    family = student(),
+    # MCMC settings
+    chains = res$chains,
+    cores = res$n_cores,
+    threads = res$threads,
+    iter = 4000,
+    warmup = 1000,
+    # Convergence helper
+    control = list(adapt_delta = 0.95),
+    # Save model for later use
+    file = here::here(dir, "fits/model_spectral_0"), 
+    file_refit = "on_change"
+  )
+}
+
+# dont change if not needed to avaid recomputing
 fit_brms_itpc_exponent <- function(df) {
   set.seed(2025)
   
@@ -30,7 +54,7 @@ fit_brms_itpc_exponent <- function(df) {
 
 save_pp_check <- function(fit) {
   p <- brms::pp_check(fit, ndraws = 50)
-  out <- "vignettes/fig-ppcheck.png"
+  out <- "figures/fig-ppcheck.png"
   ggplot2::ggsave(out, p, width = 6, height = 4, dpi = 150)
   out
 }

@@ -1,0 +1,159 @@
+---
+title: "specparam_sound_stimulation"
+format: html
+editor: source
+---
+
+# Data preparation
+
+Below I am loading data and preparing it for the first analysis
+
+```{r}
+# Load required libraries
+library(brms) # For Bayesian regression models
+library(dplyr) # For data manipulation
+library(tidyr) # For data reshaping
+library(readr) # For reading CSV files
+library(here) # For file path management
+library(ggsegDesterieux)
+dir <- "chapter4/2_final_analysis/"
+here::i_am(paste0(dir, "offset_work_june.qmd"))
+#utils_env <- new.env()
+#source(here::here("src", "R", "utils.R"), local = utils_env)
+
+#source(here::here("src", "R", "rba_helpers.R"), local = utils_env)
+# source( here::here("src", "R",  "Helpers.R"), local = utils_env)
+
+# my_brain_plot <- utils_env$my_brain_plot
+# extract_region_effects <- utils_env$extract_region_effects
+# Load spectral parameters, removing redundant columns
+df <- read_csv(
+  here::here("chapter4/results/specparam_all.csv"),
+  show_col_types = FALSE
+) %>%
+  select(
+    !c("subject_session", "run", "session", "CF", "BW", "PW", "task", "ID")
+  ) %>%
+  distinct() %>%
+  mutate(
+    P = as.factor(P),
+    T = as.factor(T),
+    roi = as.factor(roi),
+    S = as.factor(condition),
+    subject = as.factor(subject)
+  ) %>%
+  filter(P == "pre") %>%
+  select(!c("condition", "label")) %>%
+  select(c("subject", "roi", "S", "P", "T"), everything())
+```
+
+Now i can run models, where I am using sigma to model variance
+
+
+```{r}
+n_cores <- 12
+
+spectral_offset_sigma <- brm(
+  # Use bf() to specify distributional formulas
+  bf(
+    offset ~ 1 + S + (1 + S | subject) + (1 + S | roi),
+    sigma ~ 1 + S + (1 + S | subject) + (1 + S | roi)
+  ),
+  data = df,
+  # Student's t distribution to handle potential outliers
+  family = student(),
+  # MCMC settings
+  chains = 8,
+  iter = 8000,
+  warmup = 1000,
+  cores = n_cores,
+  # Convergence helper
+  control = list(adapt_delta = 0.95),
+  # Save model for later use
+  file = here::here(dir, "fits/spectral_offset_sigma"),
+  file_refit = "on_change"
+)
+```
+
+
+```{r}
+
+# Source your utility functions
+source(here::here("src/R/", "Utils.R"))
+
+# 1. Extract S effects for each ROI
+# Note: In your model, S is a factor with levels "prestim" and "stim"
+# The parameter name will be "Sstim" (contrast against baseline)
+s_effects_by_roi <- extract_region_effects(
+  fit = spectral_offset_sigma,
+  region_var = "roi",
+  parameter = "Sstim", # This is the contrast effect of stim vs prestim
+  digits = 4
+)
+
+# Also extract the intercept (baseline) values
+intercept_effects <- extract_region_effects(
+  fit = spectral_offset_sigma,
+  region_var = "roi",
+  parameter = "Intercept",
+  digits = 4
+)
+
+# 2. Create a comprehensive results dataframe
+results_df <- data.frame(
+  roi = rownames(s_effects_by_roi),
+  baseline_exponent = intercept_effects$mean,
+  s_effect = s_effects_by_roi$mean,
+  s_effect_sd = s_effects_by_roi$SD,
+  s_effect_pplus = s_effects_by_roi$`P+`, # Probability of positive effect
+  s_effect_lower95 = s_effects_by_roi$`2.5%`,
+  s_effect_upper95 = s_effects_by_roi$`97.5%`
+) %>%
+  mutate(
+    # Calculate exponent during stimulation
+    stim_exponent = baseline_exponent + s_effect,
+    # Flag significant effects (using 95% credible interval)
+    significant = (s_effect_lower95 > 0) | (s_effect_upper95 < 0),
+    # Direction of effect
+    effect_direction = case_when(
+      s_effect > 0 ~ "increase",
+      s_effect < 0 ~ "decrease",
+      TRUE ~ "no_change"
+    )
+  )
+```
+
+# 3. Order by effect size and filter significant effects
+
+```{r}
+
+significant_rois <- results_df %>%
+  filter(s_effect_pplus > 0.975 | s_effect_pplus < 0.025) %>%
+  arrange(desc(abs(s_effect)))
+
+print("Number of ROIs with significant S effect:")
+print(nrow(significant_rois))
+
+print("\nTop 10 ROIs by absolute effect size:")
+print(head(significant_rois, 10))
+
+# 4. Create brain visualization of S effects
+# Filter for visualization (only significant effects)
+viz_df <- results_df %>%
+  rename(label = roi) %>%
+  filter(s_effect_pplus > 0.975 | s_effect_pplus < 0.025)
+
+# Create brain plot
+brain_plot_s_effect <- my_brain_plot(
+  viz_df,
+  desterieux,
+  s_effect,
+  filltype = "RdBu", # Red-Blue diverging palette
+  legend = TRUE
+) +
+  ggtitle(
+    "Effect of Sound Stimulation on Spectral  Offset \n(Significant ROIs Only)"
+  )
+
+print(brain_plot_s_effect)
+```

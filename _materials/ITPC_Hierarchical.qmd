@@ -1,0 +1,72 @@
+---
+title: "ITPC answer question"
+format: html
+editor: source
+---
+
+```{r}
+library(readr)
+library(here)
+library(dplyr)
+here::i_am("chapter4/2_final_analysis/ITPC_Hierarchical.qmd")
+Destrieux_final_itpc <- read_csv(here::here("chapter4/results/Destrieux_final_itpc.csv"), show_col_types = FALSE) 
+data <- Destrieux_final_itpc %>% filter(type == "stim_itpc") 
+```
+
+```{r}
+library(brms)
+```
+
+You can add options to executable code like this
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Step 1: Define the "first" condition (you can change "pre" if needed)
+first_condition <- unique(Destrieux_final_itpc$P)[1]  # or explicitly: "pre"
+
+# Step 2: Get ROI order by value in first condition
+roi_order <- Destrieux_final_itpc %>%
+  filter(P == first_condition) %>%
+  group_by(roi) %>%
+  summarise(mean_value = mean(value, na.rm = TRUE)) %>%
+  arrange(desc(mean_value)) %>%
+  pull(roi)
+
+# Step 3: Apply the ROI order to the factor levels
+Destrieux_final_itpc$roi <- factor(Destrieux_final_itpc$roi, levels = roi_order)
+
+# Step 4: Plot
+Destrieux_final_itpc %>%
+  group_by(roi, P) %>%
+  summarise(mean_value = mean(value, na.rm = TRUE)) %>%
+  ggplot(aes(x = P, y = roi, fill = mean_value)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  labs(title = "Heatmap of Mean Values", fill = "Mean Value") +
+  theme(axis.text.y = element_text(size = 6))
+```
+
+Na tym obrazku powyzej moglo byc cos nie tak
+
+```{r}
+model_pt <- brm(
+  # Formula with main effects and interaction of P and T
+  # Including random effects for subjects and ROIs
+  formula = itpc ~ 1 + P*T + (1 + P*T | roi) + (1 + P*T | subject),
+  data = df,
+  # Student's t distribution to handle potential outliers
+  family = student(),
+  # MCMC settings
+  chains = 4,
+  iter = 4000,
+  warmup = 1000,
+  cores = 8,
+  # Convergence helper
+  control = list(adapt_delta = 0.95),
+  # Save model for later use
+  file = "fits/model_pt"
+)
+```
+
