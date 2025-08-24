@@ -2,6 +2,13 @@ project:
   type: default
   output-dir: _output
 
+resource-path:
+  - .          # project root
+  - figures    # image folder under root
 
 execute:
   dir: project  
+  
+date-format: iso
+bibliography:
+  - references.bib

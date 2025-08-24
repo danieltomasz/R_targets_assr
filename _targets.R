@@ -28,6 +28,45 @@ list(
     cue = tar_cue(mode = "thorough")  # rebuild when inputs change
   ),
 
+  # Pre-stimulation, prestim condition  
+  tar_target(
+    fit_spectral_pre_stim,
+    fit_brms_spectral(
+      analysis_df %>% filter(P == "pre", S == "stim"),
+      model_suffix = "pre_stim"
+    ),
+    cue = tar_cue(mode = "thorough")
+  ),
+  
+  # Brain visualization for spectral models
+  tar_target(
+    brain_plot_spectral_pre_stim,
+    create_brain_plot(
+      fit = fit_spectral_pre_stim,
+      parameter = "Intercept",
+      filltype = "Blues",
+      filter_significant = TRUE,
+      title = "Spectral Exponent: Pre-Stimulation (Significant Regions)",
+      filename = "brain_spectral_pre_stim",
+      width = 10,
+      height = 6
+    ),
+    format = "file"
+  ),
+  
+
+  
+  # Summary forest plot for spectral model
+  tar_target(
+    summary_plot_spectral_pre_stim,
+    create_effects_summary_plot(
+      fit = fit_spectral_pre_stim,
+      parameter = "Intercept",
+      filename = "summary_spectral_pre_stim"
+    ),
+    format = "file"
+  ),
+  
   # One hierarchical model (fast-ish settings to begin with)
   tar_target(
     fit_itpc_exponent,

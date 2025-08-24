@@ -83,7 +83,7 @@ extractorRData <- function(file, object = NULL) {
 }
 
 
-extract_region_effects <- function(fit, region_var = "ROI", parameter = "Intercept",
+extract_region_effects <- function(fit, region_var = "roi", parameter = "Intercept",
                                    probs = c(0.025, 0.05, 0.5, 0.95, 0.975),
                                    digits = 8, scale = 1) {
   # Check if the fit object is from brms

@@ -3,6 +3,9 @@ title: "ITPC ~ exponent: a minimal hierarchical BRMS example"
 format:
     html: 
        embed-resources: true
+       toc: true
+       toc-location: left     # left | right | body
+       toc-depth: 3           # how many heading levels to include
 execute:
   echo: true
   warning: false
@@ -10,6 +13,8 @@ execute:
 ---
 
 ```{r}
+#| echo: false
+
 library(targets)
 library(here)
 
@@ -25,3 +30,69 @@ pp  <- targets::tar_read(ppcheck_png,        store = store)
   # Rendered by hand: use absolute, project-rooted paths
   print("Targets need to be run")}
 ```
+
+
+
+1. Opening: Neural synchrony and gamma oscillations in brain function
+2. ASSR as a measure: 40-Hz ASSR as a reliable measure of gamma synchrony
+3. 1/f slope as biomarker: Aperiodic activity and its relationship to E/I balance
+4. The connection: Why these measures might be related (biological + methodological)
+5. Current study: Your specific hypothesis and approach
+
+# Data
+
+
+The experiment used a within-subjects design to investigate cortical gamma-band synchronization in response to 40 Hz amplitude-modulated auditory stimuli. As shown in @fig-factors, the protocol comprised two  different sessions of bi-hemispheric tDCS stimulation (sham and real) conducted at least 20 hours apart indicated by condition (T): REAL or SHAM. The order of the tDCS stimulation (sham and  real) was counterbalanced across subjects. Stimulation was applied to the left and right pericentral regions [@fig-factors] using standard protocols. The anode was positioned over the left hemisphere and the cathode over the right hemisphere, targeting auditory cortical regions. Real  stimulation lasted 20 min with 20 s of fade-in and fade-out.  Sham stimulation was performed with the same settings, but electrical  current was delivered only for 20 s at the beginning and at the end of  the tDCS session.
+
+::: {#fig-factors}
+
+![](figures/ch04-1-factors.png){ fig-scap='Experimental design'}
+
+Design of the orginal experiment. Source: [@pellegrino2019TranscranialDirectCurrent]
+:::
+
+
+Each session included two blocks corresponding to conditions related to the time (P) of applying tDCS stimulation: PRE (before tDCS) and POST (after tDCS). @fig-sound2 shows the structure of a paradigm used to induce 40 Hz synchrony during a single block. Each block consisted of 180 repetitions lasting 2 s each. Each trial included 1 s of pause (S=PRESTIM condition) followed by a 40 Hz amplitude-modulated (AM) tone (S=STIM condition), so that the stimulus onset asynchrony was 2 s. Each block lasted a total of 6 minutes (180 trials × 2 seconds).
+@fig-sound1 illustrates the auditory stimulus, an amplitude modulated tone with the following parameters: carrier frequency = 1,000 Hz and amplitude modulating frequency = 40 Hz. 
+
+
+::: {#fig-signal layout-ncol=2}
+
+
+![Structure of the trial.](figures/experimental_protocol_sound2.png){#fig-sound2}
+
+
+![ Carrier and amplitude modulation.](figures/experimental_protocol_sound1.png){#fig-sound1}
+
+
+Structure of auditory stimulation. Adapted from @pellegrino2019TranscranialDirectCurrent.
+
+:::
+
+
+#  Current study
+
+In the present study, we investigated whether the induced Inter-Trial Phase Coherence (ITPC) is correlated with 1/f slope of power spectrum of the signal.
+
+To prepare the final analysis we nee to know several questions
+- If the ITPC in the condition S=STIM is different between P and T condition
+
+# Methods
+
+###  Mapping of value distributions of variables of interest
+
+To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we conducted a Bayesian multilevel analysis using the brms package [@burkner2017BrmsPackageBayesian] in R ( R version `4.5.1` and brms version `2.22`). We use `targets` package to document our pipeline analysis with the code available on github and artefacts and code on OSF.
+ <!-- This preliminary analysis was performed to determine whether conditions could be appropriately combined in subsequent modeling. -->
+
+I am interested into the if the ITPC is different for  the 
+
+ First part we used data from the PRE condition
+
+We looked into simple model where and how much  ASSR change ITPC.
+My assumption is that the  effect of  sound  stimulation will be dependent both from the `Subject` and `ROI` grouping variables (@barr2013RandomEffectsStructure argues for maximal structure of model being conservative)
+$$  ITPC \sim  1+  S + (1+ S|ROI) + (1 + S|Subject)$$
+
+
+# Results
+
+We observed a strong effect of auditory stimulus on ITPC in auditory and related regions. However, there was no evidence that the sound stimulation directly affected the spectral exponent. We also examined how the spectral exponent influenced ITPC.

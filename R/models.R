@@ -1,23 +1,19 @@
 # R/models.R
 
-fit_brms_spectral <- function(df) {
-  res <- itpc_resources()  # res$chains, res$cores, res$threads
+fit_brms_spectral <- function(df, model_suffix = "default") {
+  res <- itpc_resources()
   
-  model_spectral_0 <- brm(
+  brms::brm(
     formula = exponent ~ 1 + (1 | subject) + (1 | roi),
     data = df,
-    # Student's t distribution to handle potential outliers
     family = student(),
-    # MCMC settings
     chains = res$chains,
-    cores = res$n_cores,
+    cores = res$cores,
     threads = res$threads,
     iter = 4000,
     warmup = 1000,
-    # Convergence helper
     control = list(adapt_delta = 0.95),
-    # Save model for later use
-    file = here::here(dir, "fits/model_spectral_0"), 
+    file = here::here("fits", paste0("model_spectral_", model_suffix)),
     file_refit = "on_change"
   )
 }
