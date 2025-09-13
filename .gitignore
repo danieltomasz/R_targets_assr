@@ -18,3 +18,6 @@ derived/
 #dont ignore static figuress
 !figures/static/
 _archive/
+**/*.quarto_ipynb
+**/*cache*/
+**/*cache**/

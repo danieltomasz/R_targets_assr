@@ -16,97 +16,136 @@ create_brain_plot <- function(fit, parameter = "Intercept", region_var = "roi",
                               title = NULL, filename = NULL, 
                               width = 10, height = 6) {
   
-  # Load required libraries and data
-  library(ggsegDesterieux)
-  library(ggplot2)
-  
-  # Extract region-specific effects
-  effects <- extract_region_effects(
-    fit = fit,
-    region_var = region_var,
-    parameter = parameter,
-    digits = 4
-  )
-  
-  # Create results dataframe with roi names
-  results_df <- data.frame(
-    label = rownames(effects),  # ggseg uses 'label' for region names
-    mean_effect = effects$mean,
-    pplus = effects$`P+`,
-    lower95 = effects$`2.5%`,
-    upper95 = effects$`97.5%`,
-    stringsAsFactors = FALSE
-  ) %>%
-    mutate(
-      significant = (pplus > 0.95) | (pplus < 0.05),
-      effect_direction = case_when(
-        mean_effect > 0 ~ "positive",
-        mean_effect < 0 ~ "negative", 
-        TRUE ~ "none"
-      )
+  # Wrap everything in tryCatch to prevent script crashes
+  tryCatch({
+    
+    # Load required libraries and data
+    library(ggsegDesterieux)
+    library(ggplot2)
+    library(dplyr)
+    library(readr)
+    
+    # Extract region-specific effects
+    effects <- extract_region_effects(
+      fit = fit,
+      region_var = region_var,
+      parameter = parameter,
+      digits = 4
     )
-  
-  # Filter for significant effects if requested
-  if (filter_significant) {
-    plot_df <- results_df %>% filter(significant)
-    if (nrow(plot_df) == 0) {
-      warning("No significant effects found for plotting")
+    
+    # Create results dataframe with roi names
+    results_df <- data.frame(
+      label = rownames(effects),  # ggseg uses 'label' for region names
+      mean_effect = effects$mean,
+      pplus = effects$`P+`,
+      lower95 = effects$`2.5%`,
+      upper95 = effects$`97.5%`,
+      stringsAsFactors = FALSE
+    ) %>%
+      mutate(
+        significant = (pplus > 0.95) | (pplus < 0.05),
+        effect_direction = case_when(
+          mean_effect > 0 ~ "positive",
+          mean_effect < 0 ~ "negative", 
+          TRUE ~ "none"
+        )
+      )
+    
+    # Count significant effects
+    n_significant <- sum(results_df$significant)
+    
+    # Handle case with no significant effects
+    if (filter_significant && n_significant == 0) {
+      warning(paste0("No significant effects found for parameter '", parameter, 
+                     "' (P+ > 0.95 or P+ < 0.05). Plotting all regions instead."))
+      plot_df <- results_df  # Use all regions instead of returning NULL
+      filter_significant <- FALSE  # Update flag for filename
+    } else if (filter_significant) {
+      plot_df <- results_df %>% filter(significant)
+    } else {
+      plot_df <- results_df
+    }
+    
+    # Create brain plot with error handling
+    p <- tryCatch({
+      my_brain_plot(
+        df = plot_df,
+        atlas_df = desterieux,  # from ggsegDesterieux
+        parameter = mean_effect,
+        filltype = filltype,
+        legend = TRUE
+      )
+    }, error = function(e) {
+      warning(paste0("Error creating brain plot: ", e$message))
+      return(NULL)
+    })
+    
+    # If brain plot failed, return NULL
+    if (is.null(p)) {
+      warning("Brain plot creation failed, returning NULL")
       return(NULL)
     }
-  } else {
-    plot_df <- results_df
-  }
-  
-  # Create brain plot
-  p <- my_brain_plot(
-    df = plot_df,
-    atlas_df = desterieux,  # from ggsegDesterieux
-    parameter = mean_effect,
-    filltype = filltype,
-    legend = TRUE
-  )
-  
-  # Add title if provided
-  if (!is.null(title)) {
-    p <- p + ggtitle(title)
-  }
-  
-  # Create filename if not provided
-  if (is.null(filename)) {
-    significance_suffix <- if(filter_significant) "_significant" else "_all"
-    filename <- paste0("brain_plot_", parameter, significance_suffix)
-  }
-  
-  # Ensure figures directory exists
-  dir.create("figures", recursive = TRUE, showWarnings = FALSE)
-  
-  # Save plot
-  output_path <- file.path("figures", paste0(filename, ".png"))
-  ggsave(
-    filename = output_path,
-    plot = p,
-    width = width,
-    height = height,
-    dpi = 300,
-    bg = "white"
-  )
-  
-  # Also save the underlying data
-  data_path <- file.path("figures", paste0(filename, "_data.csv"))
-  write_csv(results_df, data_path)
-  
-  # Print summary
-  cat(sprintf(
-    "Brain plot saved: %s\n- Total regions: %d\n- Significant regions: %d\n- Parameter: %s\n", 
-    output_path, 
-    nrow(results_df), 
-    sum(results_df$significant),
-    parameter
-  ))
-  
-  return(output_path)
+    
+    # Add title if provided
+    if (!is.null(title)) {
+      p <- p + ggtitle(title)
+    }
+    
+    # Create filename if not provided
+    if (is.null(filename)) {
+      significance_suffix <- if(filter_significant) "_significant" else "_all"
+      filename <- paste0("brain_plot_", gsub(":", "_", parameter), significance_suffix)
+    }
+    
+    # Ensure figures directory exists
+    dir.create("figures", recursive = TRUE, showWarnings = FALSE)
+    
+    # Save plot with error handling
+    output_path <- file.path("figures", paste0(filename, ".png"))
+    tryCatch({
+      ggsave(
+        filename = output_path,
+        plot = p,
+        width = width,
+        height = height,
+        dpi = 300,
+        bg = "white"
+      )
+    }, error = function(e) {
+      warning(paste0("Error saving plot: ", e$message))
+      return(NULL)
+    })
+    
+    # Also save the underlying data with error handling
+    data_path <- file.path("figures", paste0(filename, "_data.csv"))
+    tryCatch({
+      write_csv(results_df, data_path)
+    }, error = function(e) {
+      warning(paste0("Error saving data: ", e$message))
+    })
+    
+    # Print summary
+    cat(sprintf(
+      "Brain plot created: %s\n- Total regions: %d\n- Significant regions: %d\n- Parameter: %s\n", 
+      output_path, 
+      nrow(results_df), 
+      n_significant,
+      parameter
+    ))
+    
+    # Additional helpful message if no significant effects
+    if (n_significant == 0) {
+      cat("Note: No regions showed significant effects (P+ > 0.95 or P+ < 0.05)\n")
+    }
+    
+    return(output_path)
+    
+  }, error = function(e) {
+    # Catch any unexpected errors
+    warning(paste0("create_brain_plot failed for parameter '", parameter, "': ", e$message))
+    return(NULL)
+  })
 }
-
 #' Create summary statistics plot from effects
 #' @param fit brmsfit object  
 #' @param parameter Parameter to analyze
