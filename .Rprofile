@@ -1,3 +1,4 @@
+source("renv/activate.R")
 # .Rprofile (project root)
 if (interactive() && file.exists("DESCRIPTION")) {
   if (requireNamespace("devtools", quietly = TRUE)) {

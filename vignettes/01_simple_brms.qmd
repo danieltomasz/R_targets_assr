@@ -84,97 +84,35 @@ Structure of auditory stimulation. Adapted from @pellegrino2019TranscranialDirec
 
 #  Current study
 
+###  Mapping of value distributions of variables of interest
+To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we conducted a Bayesian multilevel analysis using the brms package [@burkner2017BrmsPackageBayesian] in R ( R version `4.5.1` and brms version `2.23`). We use `targets` package to document our pipeline analysis with the code available on github and artefacts and code on OSF.
+
 ::: {.callout-note}
 ## Question 1
-We were interested if you are interested if if that sounds stimulation is where influence ATP C and which region
-We were interested in question If the ITPC in the condition S=STIM is different between P and T condition.
+We were interested if you are interested if if that sounds stimulation is influence ITPC and which ROIs
+We were interested in question If the ITPC in the condition S=STIM is different between P and T condition and for which ROIs?
+
 :::
 
-::: {.callout-note}
-## Question 2
-We were interested in question If the ITPC in the condition S=STIM is different between P and T condition.
-:::
-
-
-::: {.callout-note}
-## Question 3
-We were interested in question If the ITPC in the condition S=STIM is different between P and T condition.
-:::
-
-
-In the present study, we investigated whether the induced Inter-Trial Phase Coherence (ITPC) is correlated with 1/f slope of power spectrum of the signal. Question can be posed and answered in many different ways, using different methods. First I tried to use RBA (Gang Chen refernce) models looking for a difference between pairs of conditions then I generalized it to `brms` models.
-
-
-
-To prepare the final analysis we nee to know several questions
-- If the ITPC in the condition S=STIM is different between P and T condition. We compute different measures - Pellegrino computed z-scored ITPC, and I am computing raw ITPC respones. Our initial results shows that the  there is no difference to ITPC mesured with tdcs and sham - can i compute it via anova on the speficic regions only?
-
-
-
-# Methods
-
-###  Mapping of value distributions of variables of interest
-
-To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we conducted a Bayesian multilevel analysis using the brms package [@burkner2017BrmsPackageBayesian] in R ( R version `4.5.1` and brms version `2.22`). We use `targets` package to document our pipeline analysis with the code available on github and artefacts and code on OSF.
- <!-- This preliminary analysis was performed to determine whether conditions could be appropriately combined in subsequent modeling. -->
-
-I am interested into the if the ITPC is different for  the 
-
- First part we used data from the PRE condition
+ First part we used data from the PRE condition.
 
 We looked into simple model where and how much  ASSR change ITPC.
-My assumption is that the  effect of  sound  stimulation will be dependent both from the `Subject` and `ROI` grouping variables (@barr2013RandomEffectsStructure argues for maximal structure of model being conservative)
-$$  ITPC \sim  1+  S + (1+ S|ROI) + (1 + S|Subject)$$
-## Actual modelling
 
-```{r}
-# Check all tDCS parameters for significant effects
-parameters <- c("Ppost", "Treal", "Ppost:Treal")
-parameter_names <- c("Time effect (post vs pre in sham)", 
-                    "Treatment effect (real vs sham at pre)", 
-                    "tDCS × Time interaction")
-
-for(i in 1:length(parameters)) {
-  roi_effects <- extract_region_effects(model_pt_stim, parameter = parameters[i])
-  n_significant <- sum(roi_effects$`P+` > 0.95 | roi_effects$`P+` < 0.05)
-  
-  cat(parameter_names[i], ": ", n_significant, " regions with P+ > 0.95 or P+ < 0.05\n")
-}
-
-cat("\nConclusion: Insufficient evidence for tDCS effects if all counts are 0")
-
-# Visualize region-specific P×T interaction effects
-interaction_plot <- create_brain_plot(
-  fit = model_pt_stim,
-  parameter = "Ppost:Treal",  # This is the P×T interaction term
-  filltype = "RdBu",  # Red-blue diverging palette centered at zero
-  filter_significant = TRUE,  # Only show regions with strong evidence
-  title = "tDCS × Time Interaction Effects on ITPC",
-  filename = "itpc_interaction_effects",
-  width = 12, height = 8
-)
-```
-We found insufficient evidence for tDCS × time interaction effects on ITPC (no regions with P+ > 0.95), suggesting that tDCS effects do not significantly modify ITPC across our experimental conditions. Therefore, we combined data across conditions to examine the relationship between ITPC and spectral exponent."
-
-
-
-# Results
-
-We observed a strong effect of auditory stimulus on ITPC in auditory and related regions. However, there was no evidence that the sound stimulation directly affected the spectral exponent. We also examined how the spectral exponent influenced ITPC.
-
-
-
-
-###  Mapping of value distributions of variables of interest
-
-To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we conducted a Bayesian multilevel analysis using the brms package (Bürkner, 2017) in R ( R version `4.5.1` and brms version `2.22`). 
- <!-- This preliminary analysis was performed to determine whether conditions could be appropriately combined in subsequent modeling. -->
-
- First part we used data from the PRE condition
 
 We looked into simple model where and how much  ASSR change ITPC.
 My assumption is that the  effect of  sound  stimulation will be dependent both from the Subject and roi (@barr2013RandomEffectsStructure argues for maximal structure of model being conservative)
 $$  ITPC \sim  1+  S + (1+ S|ROI) + (1 + S|Subject)$$
+
+
+My assumption is that the  effect of  sound  stimulation will be dependent both from the `Subject` and `ROI` grouping variables (@barr2013RandomEffectsStructure argues for maximal structure of model being conservative)
+$$  ITPC \sim  1+  S + (1+ S|ROI) + (1 + S|Subject)$$
+
+
+::: {.callout-note}
+## Question 2
+We are interested in the same question but for our parametrisation of the spectrum (exponent and offset)
+:::
+
 
 Similarly we do use similar structure for parameters of the slope - exponent and offset
 
@@ -184,7 +122,25 @@ $$ offset \sim 1 + S  + (1 + S|ROI) + (1 + S|Subject)$$
 
 We decided to fit sigma  in the models as well to capture the uncertainty more precisely -  Different subjects may not only differ in their mean responses but also in their consistency and ifferent ROIs might have different signal-to-noise ratios.
 
-#### Main Analysis
+
+
+::: {.callout-note}
+## Question 3
+Main question, we investigated whether the induced Inter-Trial Phase Coherence (ITPC) is correlated with 1/f slope of power spectrum of the signal
+:::
+
+
+. Question can be posed and answered in many different ways, using different methods. First I tried to use RBA (Gang Chen refernce) models looking for a difference between pairs of conditions then I generalized it to `brms` models.
+
+
+
+To prepare the final analysis we nee to know several questions
+- If the ITPC in the condition S=STIM is different between P and T condition. We compute different measures - Pellegrino computed z-scored ITPC, and I am computing raw ITPC respones. Our initial results shows that the  there is no difference to ITPC mesured with tdcs and sham - can i compute it via anova on the speficic regions only?
+
+
+
+ <!-- This preliminary analysis was performed to determine whether conditions could be appropriately combined in subsequent modeling. -->
+
 
 A hierarchical Bayesian model was implemented using the brms package to assess the relationship between ITPC and spectral exponent. The model was specified as:
 
@@ -219,13 +175,45 @@ We used a Student's t-distribution as the likelihood function to accommodate pot
 For hypothesis testing, we examined the posterior distributions of the regression coefficients, focusing on the main effects of time point and stimulation type, as well as their interaction. We calculated probability values (P+) for each ROI-specific parameter, representing the probability of a positive effect when the mean was positive, or a negative effect when the mean was negative. Effects were considered to show strong evidence when P+ exceeded 0.95 (strong evidence for a positive effect) or fell below 0.05 (strong evidence for a negative effect).
 
 
-# Simulations 
-
-## Descriptive Statistics and Data Quality
-
-Before examining the relationship between spectral exponent and ITPC, we first verified that our experimental manipulations (tDCS stimulation) did not systematically alter ITPC measurements, allowing us to pool data across conditions for our primary analysis
-
 # Results
+
+```{r}
+# Check all tDCS parameters for significant effects
+parameters <- c("Ppost", "Treal", "Ppost:Treal")
+parameter_names <- c("Time effect (post vs pre in sham)", 
+                    "Treatment effect (real vs sham at pre)", 
+                    "tDCS × Time interaction")
+
+for(i in 1:length(parameters)) {
+  roi_effects <- extract_region_effects(model_pt_stim, parameter = parameters[i])
+  n_significant <- sum(roi_effects$`P+` > 0.95 | roi_effects$`P+` < 0.05)
+  
+  cat(parameter_names[i], ": ", n_significant, " regions with P+ > 0.95 or P+ < 0.05\n")
+}
+
+cat("\nConclusion: Insufficient evidence for tDCS effects if all counts are 0")
+
+# Visualize region-specific P×T interaction effects
+interaction_plot <- create_brain_plot(
+  fit = model_pt_stim,
+  parameter = "Ppost:Treal",  # This is the P×T interaction term
+  filltype = "RdBu",  # Red-blue diverging palette centered at zero
+  filter_significant = TRUE,  # Only show regions with strong evidence
+  title = "tDCS × Time Interaction Effects on ITPC",
+  filename = "itpc_interaction_effects",
+  width = 12, height = 8
+)
+```
+We found insufficient evidence for tDCS × time interaction effects on ITPC (no regions with P+ > 0.95), suggesting that tDCS effects do not significantly modify ITPC across our experimental conditions. Therefore, we combined data across conditions to examine the relationship between ITPC and spectral exponent."
+
+
+
+
+
+We observed a strong effect of auditory stimulus on ITPC in auditory and related regions. However, there was no evidence that the sound stimulation directly affected the spectral exponent. We also examined how the spectral exponent influenced ITPC.
+
+
+
 
 ### ITPC
 
@@ -267,7 +255,6 @@ Mean values of exponent and offset averaged for the trials before tDCS stimulati
 -   No significant evidence was found for any of the models involving the Offset either as a predicted variable, and as a predictor, suggesting a marginal role for it in the auditory entrainment.
 
 ::: {#fig-model-evidence}
-![](figures/chapter4/model_evidence.png)
 
 Positive values indicate stronger modulation at baseline, negative values indicate stronger modulation during stimulation.
 :::
@@ -277,3 +264,12 @@ Positive values indicate stronger modulation at baseline, negative values indica
 
 Additionally, we extracted the ROI-specific coefficients to examine regional variation in the  effects. This allowed us to identify potential regions showing differential responses to the stimulation conditions.
 The preliminary analysis revealed no significant differences in ITPC between pre- and post-stimulation timepoints, nor between tDCS and sham conditions. The interaction between timepoint and stimulation type also showed no significant effect. These findings suggest that ITPC measurements can be appropriately pooled across these conditions in subsequent analyses, as the experimental manipulations did not substantially alter the phase coherence measures.
+
+
+
+# Simulations 
+
+## Descriptive Statistics and Data Quality
+
+Before examining the relationship between spectral exponent and ITPC, we first verified that our experimental manipulations (tDCS stimulation) did not systematically alter ITPC measurements, allowing us to pool data across conditions for our primary analysis
+

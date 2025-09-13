@@ -3,6 +3,8 @@ library(tarchetypes)
 
 # Packages ----
 
+
+
 tar_option_set(
   packages = c("readr", "dplyr", "brms", "ggplot2", "cmdstanr"),
   workspace_on_error = TRUE
@@ -14,16 +16,17 @@ targets::tar_source() # sources all R/*.R and tracks them for invalidation
 data_targets <- list(
   # raw inputs tracked as files
   tar_target(itpc_csv, "data/Destrieux_final_itpc.csv", format = "file"),
-  tar_target(spec_csv, "data/specparam_all.csv", format = "file"),
+  tar_target(spec_csv, "data/specparam_all.csv", format = "file", description= "load specparam parametrisation data"),
 
   # join + tidy (in memory)
-  tar_target(analysis_df, make_analysis_df(itpc_csv, spec_csv)),
+  tar_target(analysis_df, make_analysis_df(itpc_csv, spec_csv),  description = "Join ITPC and spectral-exponent data for modeling"),
 
   # save intermediates (files returned; targets tracks them)
   tar_target(
     analysis_df_csv,
     write_df_csv(analysis_df, "derived/analysis_df.csv"),
-    format = "file"
+    format = "file",
+    description = "write joined ITPC and spectral exponent data as csv"
   ),
 
   # restrict to S=stim and set baselines (in memory)
@@ -34,14 +37,14 @@ data_targets <- list(
       dplyr::mutate(
         P = forcats::fct_relevel(P, "pre", "post"),
         T = forcats::fct_relevel(T, "sham", "real")
-      )
+      ), description = "filter to include only data when sound stimulation was on"
   ),
 
   # save S=stim subset too
   tar_target(
     df_stim_csv,
     write_df_csv(df_stim, "derived/df_stim.csv"),
-    format = "file"
+    format = "file", description = "Save dataseset when sound stimulation was on"
   )
 )
 
@@ -136,7 +139,7 @@ model_exponent <- list(
   # Fit + save; return the on-disk file path
   tar_target(
     model_exponent_file,
-    {f <- itpc ~ 1 + P*T + (1 + P*T | roi) + (1 + P*T | subject)
+    {f <- exponent  ~ 1 + P*T + (1 + P*T | roi) + (1 + P*T | subject)
     fit_brms_generic(
       df = df_stim,
       formula = f,
@@ -160,7 +163,7 @@ model_exponent <- list(
   #    b_Treal         = real - sham (at P=pre)
   #    b_Ppost:Treal   = difference-in-differences (interaction)
   tar_target(
-    exopent_hypothesis,
+    exponent_hypothesis,
     {
       hyp <- c(
         "ΔP_sham" = "Ppost = 0",
@@ -191,7 +194,7 @@ model_exponent <- list(
   # 5) (Optional) ROI-wise random slope for the interaction (for brain maps etc.)
   # Comment out if you don't need it.
   tar_target(
-    eponent_roi_slopes,
+    exponent_roi_slopes,
     {
       # Extract random effect draws for roi on the P×T interaction
       # brms names: "r_roi[<ROI>,Ppost:Treal]"
@@ -225,4 +228,4 @@ vignette_targets <- list(
 
 
 # IMPORTANT: return ONE flat plan (don’t nest lists)
-c(data_targets, model_itpc, model_exponent,  vignette_targets)
+c(data_targets, model_itpc, model_exponent,  vignette_targets, itpc_compare_targets)

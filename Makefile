@@ -18,3 +18,7 @@ reload: doc load
 
 r:
 	@R --quiet --no-save
+	
+	
+targets:
+	files-to-prompt .  --ignore ./_archive -e qmd -e R  -e md -e Rmd --cxml -o targets.txt

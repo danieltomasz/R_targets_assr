@@ -7,7 +7,7 @@ targets::tar_make()
 browseURL("_output/vignettes/01_simple_brms.html")
 ```
 
-## if you using quarto, rememebrt to check if there any `_quarto.yml` a level above, interfering with your project
+## if you using quarto, remember to check if there any `_quarto.yml` a level above, interfering with your project
 
 
 # Targets
@@ -19,5 +19,84 @@ tar_manifest(fields = command)
 
 And visualise the analysis
 ```{r}
-tar_visnetwork()
+# scripts/build_graphs.R
+library(targets)
+library(htmlwidgets)
+
+dir.create("docs", showWarnings = FALSE)
+g <- tar_visnetwork(targets_only = TRUE,  label = c("description"),
+  label_width = 50)        # interactive htmlwidget
+htmlwidgets::saveWidget(g, "docs/pipeline.html", selfcontained = TRUE)
 ```
+
+```{r}
+# scripts/build_graphs.R
+library(targets)
+library(dplyr)
+library(visNetwork)
+library(htmlwidgets)
+
+dir.create("docs", showWarnings = FALSE)
+
+net <- targets::tar_network(targets_only = TRUE)  # nodes + edges
+nodes <- net$vertices %>%
+  transmute(
+    id    = name,
+    label = name,                                   # short, clean node text
+    title = paste0("<b>", name, "</b><br/>", dplyr::coalesce(description, "")) # HTML tooltip
+  )
+
+edges <- net$edges %>%
+  transmute(from = as.character(from), to = as.character(to))
+
+g <- visNetwork(nodes, edges, height = "750px", width = "100%") %>%
+  visHierarchicalLayout(direction = "LR", levelSeparation = 180, nodeSpacing = 120,
+                        treeSpacing = 180, blockShifting = TRUE, edgeMinimization = TRUE,
+                        sortMethod = "directed") %>%
+  visNodes(shape = "box", widthConstraint = list(maximum = 240)) %>%
+  visEdges(arrows = "to", smooth = FALSE) %>%
+  visOptions(highlightNearest = list(enabled = TRUE, hover = TRUE), nodesIdSelection = TRUE) %>%
+  visInteraction(hover = TRUE) %>%
+  visPhysics(enabled = FALSE)
+
+htmlwidgets::saveWidget(g, "docs/pipeline.html", selfcontained = TRUE)
+```
+
+
+
+```{r}
+# scripts/pipeline_graph.R
+library(targets)
+library(dplyr)
+library(visNetwork)
+library(htmlwidgets)
+
+# 1) Build the network from your pipeline
+net <- targets::tar_network(targets_only = TRUE)
+
+# 2) Nodes MUST have `id`; edges MUST have `from`/`to` matching those ids
+nodes <- net$vertices %>%
+  transmute(
+    id    = name,                                 # <- crucial
+    label = name,
+    description = dplyr::coalesce(description, ""),
+    title = paste0("<b>", name, "</b><br/>", description)  # HTML tooltip
+  )
+
+edges <- net$edges %>%
+  transmute(
+    from = as.character(from),   # ensure character and match `nodes$id`
+    to   = as.character(to)
+  )
+
+# 3) Build widget (add arrows so direction is obvious)
+g <- visNetwork(nodes, edges, height = "700px", width = "100%") %>%
+  visEdges(arrows = "to") %>%
+  visOptions(highlightNearest = TRUE) %>%
+  visInteraction(hover = TRUE)
+
+# 4) Save to HTML
+dir.create("docs", showWarnings = FALSE)
+htmlwidgets::saveWidget(g, "docs/pipeline_tooltips.html", selfcontained = TRUE)
+```
+
