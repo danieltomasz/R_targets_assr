@@ -21,3 +21,4 @@ _archive/
 **/*.quarto_ipynb
 **/*cache*/
 **/*cache**/
+sandbox/

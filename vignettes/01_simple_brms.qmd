@@ -89,12 +89,12 @@ To examine potential differences in inter-trial phase coherence (ITPC) across ex
 
 ::: {.callout-note}
 ## Question 1
-We were interested if you are interested if if that sounds stimulation is influence ITPC and which ROIs
+We were interested if the sounds stimulation is influence ITPC and which ROIs
 We were interested in question If the ITPC in the condition S=STIM is different between P and T condition and for which ROIs?
 
 :::
 
- First part we used data from the PRE condition.
+First part we used data from the PRE condition.
 
 We looked into simple model where and how much  ASSR change ITPC.
 
