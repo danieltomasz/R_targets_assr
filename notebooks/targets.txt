@@ -11,7 +11,7 @@ targets::tar_make()
 browseURL("_output/vignettes/01_simple_brms.html")
 ```
 
-## if you using quarto, rememebrt to check if there any `_quarto.yml` a level above, interfering with your project
+## if you using quarto, remember to check if there any `_quarto.yml` a level above, interfering with your project
 
 
 # Targets
@@ -23,7 +23,85 @@ tar_manifest(fields = command)
 
 And visualise the analysis
 ```{r}
-tar_visnetwork()
+# scripts/build_graphs.R
+library(targets)
+library(htmlwidgets)
+
+dir.create("docs", showWarnings = FALSE)
+g <- tar_visnetwork(targets_only = TRUE,  label = c("description"),
+  label_width = 50)        # interactive htmlwidget
+htmlwidgets::saveWidget(g, "docs/pipeline.html", selfcontained = TRUE)
+```
+
+```{r}
+# scripts/build_graphs.R
+library(targets)
+library(dplyr)
+library(visNetwork)
+library(htmlwidgets)
+
+dir.create("docs", showWarnings = FALSE)
+
+net <- targets::tar_network(targets_only = TRUE)  # nodes + edges
+nodes <- net$vertices %>%
+  transmute(
+    id    = name,
+    label = name,                                   # short, clean node text
+    title = paste0("<b>", name, "</b><br/>", dplyr::coalesce(description, "")) # HTML tooltip
+  )
+
+edges <- net$edges %>%
+  transmute(from = as.character(from), to = as.character(to))
+
+g <- visNetwork(nodes, edges, height = "750px", width = "100%") %>%
+  visHierarchicalLayout(direction = "LR", levelSeparation = 180, nodeSpacing = 120,
+                        treeSpacing = 180, blockShifting = TRUE, edgeMinimization = TRUE,
+                        sortMethod = "directed") %>%
+  visNodes(shape = "box", widthConstraint = list(maximum = 240)) %>%
+  visEdges(arrows = "to", smooth = FALSE) %>%
+  visOptions(highlightNearest = list(enabled = TRUE, hover = TRUE), nodesIdSelection = TRUE) %>%
+  visInteraction(hover = TRUE) %>%
+  visPhysics(enabled = FALSE)
+
+htmlwidgets::saveWidget(g, "docs/pipeline.html", selfcontained = TRUE)
+```
+
+
+
+```{r}
+# scripts/pipeline_graph.R
+library(targets)
+library(dplyr)
+library(visNetwork)
+library(htmlwidgets)
+
+# 1) Build the network from your pipeline
+net <- targets::tar_network(targets_only = TRUE)
+
+# 2) Nodes MUST have `id`; edges MUST have `from`/`to` matching those ids
+nodes <- net$vertices %>%
+  transmute(
+    id    = name,                                 # <- crucial
+    label = name,
+    description = dplyr::coalesce(description, ""),
+    title = paste0("<b>", name, "</b><br/>", description)  # HTML tooltip
+  )
+
+edges <- net$edges %>%
+  transmute(
+    from = as.character(from),   # ensure character and match `nodes$id`
+    to   = as.character(to)
+  )
+
+# 3) Build widget (add arrows so direction is obvious)
+g <- visNetwork(nodes, edges, height = "700px", width = "100%") %>%
+  visEdges(arrows = "to") %>%
+  visOptions(highlightNearest = TRUE) %>%
+  visInteraction(hover = TRUE)
+
+# 4) Save to HTML
+dir.create("docs", showWarnings = FALSE)
+htmlwidgets::saveWidget(g, "docs/pipeline_tooltips.html", selfcontained = TRUE)
 ```
 
 
@@ -35,7 +113,7 @@ tar_visnetwork()
 # TODO
 
 
-Create a targets to create figures presenting ITPC changesß
+Create a targets to create figures presenting ITPC changes
 </document_content>
 </document>
 <document index="3">
@@ -44,29 +122,39 @@ Create a targets to create figures presenting ITPC changesß
 library(targets)
 library(tarchetypes)
 
-# Packages ----
+# Load your dev package code on every run so function hashes update.
+# if (file.exists("DESCRIPTION")) {
+#   pkgload::load_all(export_all = FALSE, helpers = FALSE, attach_testthat = FALSE)
+# }
+
+# Source plan fragments / helper scripts that define objects like `itpc_compare_targets`.
+targets::tar_source("targets")   # sources all *.R under targets/
+targets::tar_source("R")   # sources all *.R under targets/
+
+# If R/ were just loose scripts (NOT a package), you would do:
+# targets::tar_source("R")
 
 tar_option_set(
   packages = c("readr", "dplyr", "brms", "ggplot2", "cmdstanr"),
-  workspace_on_error = TRUE
+  workspace_on_error = TRUE,
+  cue = tar_cue(mode = "thorough")  # rehash globals/functions, not just timestamps
 )
 
-targets::tar_source() # sources all R/*.R and tracks them for invalidation
-
-# Data Preparation ----
+# ----------------- Data prep -----------------
 data_targets <- list(
-  # raw inputs tracked as files
   tar_target(itpc_csv, "data/Destrieux_final_itpc.csv", format = "file"),
-  tar_target(spec_csv, "data/specparam_all.csv", format = "file"),
+  tar_target(spec_csv, "data/specparam_all.csv", format = "file",
+             description = "load specparam parametrisation data"),
 
   # join + tidy (in memory)
-  tar_target(analysis_df, make_analysis_df(itpc_csv, spec_csv)),
+  tar_target(analysis_df, make_analysis_df(itpc_csv, spec_csv),  description = "Join ITPC and spectral-exponent data for modeling"),
 
   # save intermediates (files returned; targets tracks them)
   tar_target(
     analysis_df_csv,
     write_df_csv(analysis_df, "derived/analysis_df.csv"),
-    format = "file"
+    format = "file",
+    description = "write joined ITPC and spectral exponent data as csv"
   ),
 
   # restrict to S=stim and set baselines (in memory)
@@ -77,14 +165,14 @@ data_targets <- list(
       dplyr::mutate(
         P = forcats::fct_relevel(P, "pre", "post"),
         T = forcats::fct_relevel(T, "sham", "real")
-      )
+      ), description = "filter to include only data when sound stimulation was on"
   ),
 
   # save S=stim subset too
   tar_target(
     df_stim_csv,
     write_df_csv(df_stim, "derived/df_stim.csv"),
-    format = "file"
+    format = "file", description = "Save dataseset when sound stimulation was on"
   )
 )
 
@@ -179,7 +267,7 @@ model_exponent <- list(
   # Fit + save; return the on-disk file path
   tar_target(
     model_exponent_file,
-    {f <- itpc ~ 1 + P*T + (1 + P*T | roi) + (1 + P*T | subject)
+    {f <- exponent  ~ 1 + P*T + (1 + P*T | roi) + (1 + P*T | subject)
     fit_brms_generic(
       df = df_stim,
       formula = f,
@@ -203,7 +291,7 @@ model_exponent <- list(
   #    b_Treal         = real - sham (at P=pre)
   #    b_Ppost:Treal   = difference-in-differences (interaction)
   tar_target(
-    exopent_hypothesis,
+    exponent_hypothesis,
     {
       hyp <- c(
         "ΔP_sham" = "Ppost = 0",
@@ -234,7 +322,7 @@ model_exponent <- list(
   # 5) (Optional) ROI-wise random slope for the interaction (for brain maps etc.)
   # Comment out if you don't need it.
   tar_target(
-    eponent_roi_slopes,
+    exponent_roi_slopes,
     {
       # Extract random effect draws for roi on the P×T interaction
       # brms names: "r_roi[<ROI>,Ppost:Treal]"
@@ -362,16 +450,16 @@ Structure of auditory stimulation. Adapted from @pellegrino2019TranscranialDirec
 #  Current study
 
 ###  Mapping of value distributions of variables of interest
-To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we conducted a Bayesian multilevel analysis using the brms package [@burkner2017BrmsPackageBayesian] in R ( R version `4.5.1` and brms version `2.22`). We use `targets` package to document our pipeline analysis with the code available on github and artefacts and code on OSF.
+To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we conducted a Bayesian multilevel analysis using the brms package [@burkner2017BrmsPackageBayesian] in R ( R version `4.5.1` and brms version `2.23`). We use `targets` package to document our pipeline analysis with the code available on github and artefacts and code on OSF.
 
 ::: {.callout-note}
 ## Question 1
-We were interested if you are interested if if that sounds stimulation is influence ITPC and which ROIs
+We were interested if the sounds stimulation is influence ITPC and which ROIs
 We were interested in question If the ITPC in the condition S=STIM is different between P and T condition and for which ROIs?
 
 :::
 
- First part we used data from the PRE condition.
+First part we used data from the PRE condition.
 
 We looked into simple model where and how much  ASSR change ITPC.
 
@@ -492,20 +580,6 @@ We observed a strong effect of auditory stimulus on ITPC in auditory and related
 
 
 
-
-
-
-
-
-
-# Simulations 
-
-## Descriptive Statistics and Data Quality
-
-Before examining the relationship between spectral exponent and ITPC, we first verified that our experimental manipulations (tDCS stimulation) did not systematically alter ITPC measurements, allowing us to pool data across conditions for our primary analysis
-
-# Results
-
 ### ITPC
 
 First we tested if the conditions PRE in real and sham conditions aren't different. No region has P+ values bigger than 0.90 or smaller than 0.10 so we concluded that these condition's aren' different.
@@ -546,7 +620,6 @@ Mean values of exponent and offset averaged for the trials before tDCS stimulati
 -   No significant evidence was found for any of the models involving the Offset either as a predicted variable, and as a predictor, suggesting a marginal role for it in the auditory entrainment.
 
 ::: {#fig-model-evidence}
-![](figures/chapter4/model_evidence.png)
 
 Positive values indicate stronger modulation at baseline, negative values indicate stronger modulation during stimulation.
 :::
@@ -556,9 +629,348 @@ Positive values indicate stronger modulation at baseline, negative values indica
 
 Additionally, we extracted the ROI-specific coefficients to examine regional variation in the  effects. This allowed us to identify potential regions showing differential responses to the stimulation conditions.
 The preliminary analysis revealed no significant differences in ITPC between pre- and post-stimulation timepoints, nor between tDCS and sham conditions. The interaction between timepoint and stimulation type also showed no significant effect. These findings suggest that ITPC measurements can be appropriately pooled across these conditions in subsequent analyses, as the experimental manipulations did not substantially alter the phase coherence measures.
+
+
+
+# Simulations 
+
+## Descriptive Statistics and Data Quality
+
+Before examining the relationship between spectral exponent and ITPC, we first verified that our experimental manipulations (tDCS stimulation) did not systematically alter ITPC measurements, allowing us to pool data across conditions for our primary analysis
+
+
 </document_content>
 </document>
 <document index="5">
+<source>./targets/_targets_itpc.R</source>
+<document_content>
+itpc_compare_targets <- list(
+  tar_target(
+    joined_data_for_itpc_comparison_run,
+    analysis_df,                        # just forward the object
+    description = "Alias of analysis_df for ITPC comparison stage"
+  )
+)
+</document_content>
+</document>
+<document index="6">
+<source>./targets/models.R</source>
+<document_content>
+# Generic BRMS saver -----------------------------------------------------------
+fit_brms_generic <- function(
+    df,
+    formula,
+    file_stem,
+    family   = brms::student(),
+    iter     = 4000,
+    warmup   = 1000,
+    control  = list(adapt_delta = 0.95),
+    backend  = "cmdstanr",
+    ...
+) {
+  res <- itpc_resources()  # expects $chains, $cores, $threads
+  dir.create(here::here("fits"), recursive = TRUE, showWarnings = FALSE)
+  
+  brms::brm(
+    formula = formula,
+    data    = df,
+    family  = family,
+    backend = backend,
+    chains  = res$chains,
+    cores   = res$cores,
+    threads = res$threads,     # keep this consistent with your itpc_resources()
+    iter    = iter,
+    warmup  = warmup,
+    control = control,
+    file    = here::here("fits", file_stem),
+    file_refit = "on_change",
+    ...
+  )
+}
+
+save_pp_check <- function(fit) {
+  p <- brms::pp_check(fit, ndraws = 50)
+  out <- "figures/fig-ppcheck.png"
+  ggplot2::ggsave(out, p, width = 6, height = 4, dpi = 150)
+  out
+}
+</document_content>
+</document>
+<document index="7">
+<source>./targets/targets_data_prep.R</source>
+<document_content>
+# R/data_prep.R
+
+
+#' Join ITPC and spectral-exponent data for modeling
+#'
+#' Reads two CSVs and builds a tidy table keyed by `subject`, `roi`, `P`, `T`, `S`.
+#'
+#' @details
+#' **Inclusion/Exclusion logic**
+#' - Keeps only ITPC rows where `type` is one of `"prestim_itpc"` or `"stim_itpc"`.
+#' - Maps `type` → `S` as: `"prestim_itpc"` → `"prestim"`, `"stim_itpc"` → `"stim"`.
+#' - In spectral params, renames `condition` to `S` and requires `S` to match the ITPC side.
+#' - Uses an inner join on `c(subject, roi, P, T, S)`; rows missing on either side are dropped.
+#'
+#' @section Output shape:
+#' A tibble with one row per `(subject, roi, P, T, S)` and columns:
+#' - `subject` (factor), `roi` (factor)
+#' - `P`, `T`
+#' - `S` (factor with levels `c("prestim","stim")`)
+#' - `itpc` (numeric), `exponent` (numeric)
+#'
+#' @param itpc_path Path to ITPC CSV with columns `subject, roi, P, T, type, value`.
+#' @param spec_path Path to spectral-params CSV with columns `subject, roi, P, T, condition, exponent`.
+#' @return A tibble ready for hierarchical modeling (e.g., with **brms**), containing only `prestim`/`stim` conditions and matched keys across sources.
+#'
+#' @examples
+#' \dontrun{
+#' df <- make_analysis_df(
+#'   "data/Destrieux_final_itpc.csv",
+#'   "data/specparam_all.csv"
+#' )
+#' }
+#' @export
+make_analysis_df <- function(itpc_path, spec_path) {
+  itpc <- readr::read_csv(itpc_path, show_col_types = FALSE) |>
+    dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) |>
+    dplyr::mutate(
+      S = dplyr::case_when(
+        type == "prestim_itpc" ~ "prestim",
+        type == "stim_itpc" ~ "stim",
+        TRUE ~ type
+      ),
+      itpc = value
+    ) |>
+    dplyr::select(subject, roi, P, T, S, itpc) |>
+    dplyr::distinct()
+
+  spec <- readr::read_csv(spec_path, show_col_types = FALSE) |>
+    dplyr::select(subject, roi, P, T, condition, exponent, offset) |>
+    dplyr::rename(S = condition) |>
+    dplyr::distinct()
+
+  out <- dplyr::inner_join(itpc, spec, by = c("subject", "roi", "P", "T", "S"))
+
+  # sanity check: no duplicates after join
+  post_dups <- out |>
+    dplyr::count(subject, roi, P, T, S, name = "n") |>
+    dplyr::filter(n > 1)
+  if (nrow(post_dups) > 0) {
+    stop("Join produced duplicates. Your inputs are still not unique on (subject, roi, P, T, S). Fix upstream.")
+  }
+
+  out |>
+    dplyr::mutate(
+      subject = factor(subject),
+      roi     = factor(roi),
+      S       = factor(S, levels = c("prestim", "stim"))
+    )
+}
+
+</document_content>
+</document>
+<document index="8">
+<source>./targets/targets_visualizations.R</source>
+<document_content>
+# R/visualizations.R
+
+#' Create and save brain plot from brms fit
+#' @param fit brmsfit object
+#' @param parameter Which parameter to plot (e.g., "Intercept", "exponent")
+#' @param region_var Name of the region variable (default "roi")
+#' @param filltype Color palette for brain plot
+#' @param filter_significant If TRUE, only plot regions with P+ > 0.95 or P+ < 0.05
+#' @param title Plot title
+#' @param filename Output filename (without extension)
+#' @param width Plot width in inches
+#' @param height Plot height in inches
+#' @return Path to saved plot file
+create_brain_plot <- function(fit, parameter = "Intercept", region_var = "roi", 
+                              filltype = "RdBu", filter_significant = TRUE,
+                              title = NULL, filename = NULL, 
+                              width = 10, height = 6) {
+  
+  # Wrap everything in tryCatch to prevent script crashes
+  tryCatch({
+    
+    # Load required libraries and data
+    library(ggsegDesterieux)
+    library(ggplot2)
+    library(dplyr)
+    library(readr)
+    
+    # Extract region-specific effects
+    effects <- extract_region_effects(
+      fit = fit,
+      region_var = region_var,
+      parameter = parameter,
+      digits = 4
+    )
+    
+    # Create results dataframe with roi names
+    results_df <- data.frame(
+      label = rownames(effects),  # ggseg uses 'label' for region names
+      mean_effect = effects$mean,
+      pplus = effects$`P+`,
+      lower95 = effects$`2.5%`,
+      upper95 = effects$`97.5%`,
+      stringsAsFactors = FALSE
+    ) %>%
+      mutate(
+        significant = (pplus > 0.95) | (pplus < 0.05),
+        effect_direction = case_when(
+          mean_effect > 0 ~ "positive",
+          mean_effect < 0 ~ "negative", 
+          TRUE ~ "none"
+        )
+      )
+    
+    # Count significant effects
+    n_significant <- sum(results_df$significant)
+    
+    # Handle case with no significant effects
+    if (filter_significant && n_significant == 0) {
+      warning(paste0("No significant effects found for parameter '", parameter, 
+                     "' (P+ > 0.95 or P+ < 0.05). Plotting all regions instead."))
+      plot_df <- results_df  # Use all regions instead of returning NULL
+      filter_significant <- FALSE  # Update flag for filename
+    } else if (filter_significant) {
+      plot_df <- results_df %>% filter(significant)
+    } else {
+      plot_df <- results_df
+    }
+    
+    # Create brain plot with error handling
+    p <- tryCatch({
+      my_brain_plot(
+        df = plot_df,
+        atlas_df = desterieux,  # from ggsegDesterieux
+        parameter = mean_effect,
+        filltype = filltype,
+        legend = TRUE
+      )
+    }, error = function(e) {
+      warning(paste0("Error creating brain plot: ", e$message))
+      return(NULL)
+    })
+    
+    # If brain plot failed, return NULL
+    if (is.null(p)) {
+      warning("Brain plot creation failed, returning NULL")
+      return(NULL)
+    }
+    
+    # Add title if provided
+    if (!is.null(title)) {
+      p <- p + ggtitle(title)
+    }
+    
+    # Create filename if not provided
+    if (is.null(filename)) {
+      significance_suffix <- if(filter_significant) "_significant" else "_all"
+      filename <- paste0("brain_plot_", gsub(":", "_", parameter), significance_suffix)
+    }
+    
+    # Ensure figures directory exists
+    dir.create("figures", recursive = TRUE, showWarnings = FALSE)
+    
+    # Save plot with error handling
+    output_path <- file.path("figures", paste0(filename, ".png"))
+    tryCatch({
+      ggsave(
+        filename = output_path,
+        plot = p,
+        width = width,
+        height = height,
+        dpi = 300,
+        bg = "white"
+      )
+    }, error = function(e) {
+      warning(paste0("Error saving plot: ", e$message))
+      return(NULL)
+    })
+    
+    # Also save the underlying data with error handling
+    data_path <- file.path("figures", paste0(filename, "_data.csv"))
+    tryCatch({
+      write_csv(results_df, data_path)
+    }, error = function(e) {
+      warning(paste0("Error saving data: ", e$message))
+    })
+    
+    # Print summary
+    cat(sprintf(
+      "Brain plot created: %s\n- Total regions: %d\n- Significant regions: %d\n- Parameter: %s\n", 
+      output_path, 
+      nrow(results_df), 
+      n_significant,
+      parameter
+    ))
+    
+    # Additional helpful message if no significant effects
+    if (n_significant == 0) {
+      cat("Note: No regions showed significant effects (P+ > 0.95 or P+ < 0.05)\n")
+    }
+    
+    return(output_path)
+    
+  }, error = function(e) {
+    # Catch any unexpected errors
+    warning(paste0("create_brain_plot failed for parameter '", parameter, "': ", e$message))
+    return(NULL)
+  })
+}
+#' Create summary statistics plot from effects
+#' @param fit brmsfit object  
+#' @param parameter Parameter to analyze
+#' @param filename Output filename
+create_effects_summary_plot <- function(fit, parameter = "Intercept", 
+                                        filename = "effects_summary") {
+  
+  effects <- extract_region_effects(fit, parameter = parameter)
+  
+  # Create summary dataframe
+  summary_df <- data.frame(
+    roi = rownames(effects),
+    mean = effects$mean,
+    lower = effects$`2.5%`,
+    upper = effects$`97.5%`,
+    pplus = effects$`P+`
+  ) %>%
+    mutate(
+      significant = (pplus > 0.95) | (pplus < 0.05),
+      roi = factor(roi, levels = roi[order(mean)])
+    )
+  
+  # Create forest plot
+  p <- ggplot(summary_df, aes(x = mean, y = roi, color = significant)) +
+    geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5) +
+    geom_pointrange(aes(xmin = lower, xmax = upper), size = 0.3) +
+    scale_color_manual(values = c("FALSE" = "gray60", "TRUE" = "red")) +
+    labs(
+      title = paste("Regional Effects:", parameter),
+      x = paste(parameter, "Effect Size"),
+      y = "Brain Region",
+      color = "Significant"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.y = element_text(size = 8),
+      legend.position = "bottom"
+    )
+  
+  # Save plot
+  dir.create("figures", recursive = TRUE, showWarnings = FALSE)
+  output_path <- file.path("figures", paste0(filename, ".png"))
+  ggsave(output_path, p, width = 12, height = 8, dpi = 150)
+  
+  return(output_path)
+}
+</document_content>
+</document>
+<document index="9">
 <source>./tests/testthat.R</source>
 <document_content>
 # This file is part of the standard setup for testthat.
@@ -576,152 +988,7 @@ test_check("assrproj")
 
 </document_content>
 </document>
-<document index="6">
-<source>./R/Utils.R</source>
-<document_content>
-library(ggseg)
-library(ggplot2)
-library(tibble)
-library(readr)
-library(dplyr)
-library(scico)
-library(ggsegDesterieux)
-library(RColorBrewer)
-
-
-my_brain_plot <- function(df, atlas_df, parameter, filltype = "Blues", legend = FALSE) {
-  # Define the expressions for each color palette
-  Blues_expr <- 'scale_fill_distiller(palette = "Blues", direction = 1)'
-  BuGn_expr <- 'scale_fill_distiller(palette = "BuGn", direction = 1)'
-  Purples_expr <- 'scale_fill_distiller(palette = "Purples", direction = 1)'
-  Vik_expr <- 'scale_fill_scico(palette = "vik",midpoint = 0)'
-  # -1 reverses direction scales 
-  RdBu_expr <- 'scale_fill_distiller(palette = "RdBu", direction = -1)' 
-  RdYlBu_expr <- 'scale_fill_distiller(palette = "RdYlBu", direction = -1)'
-  Spectral_expr <- 'scale_fill_distiller(palette = "Spectral", direction = 1)'
-
-
-
-  # Use switch to select the appropriate expression based on filtype
-  color_palette <- switch(filltype,
-    "Blues" = Blues_expr,
-    "BuGn" = BuGn_expr,
-    "Purples" = Purples_expr,
-    "Vik" = Vik_expr,
-    "RdBu" = RdBu_expr,
-    "RdYlBu" = RdYlBu_expr,
-    "Spectral" = Spectral_expr,
-    stop("Unknown filltype") # Default case if none of the above matches
-  )
-  # Go further with analysis
-  parameter <- enquo(parameter)
-  df_combined <- atlas_df %>%
-    as_tibble() %>%
-    left_join(df) %>%
-    as_brain_atlas()
-
-  p <- ggplot() +
-    ggseg::geom_brain(
-      atlas = df_combined,
-      mapping = aes(fill = !!parameter),
-      position = position_brain(side ~ hemi),
-      show.legend = legend
-    ) +
-    theme(
-      panel.background = element_blank(),
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.ticks = element_blank(),
-      axis.text.x = element_blank(),
-      axis.text.y = element_blank(),
-      axis.title.x = element_blank(),
-      axis.title.y = element_blank(),
-      plot.background = element_rect(fill = "transparent", colour = NA),
-      plot.margin = unit(c(-1, -1.2, -1.2, -1.5), "cm"), # Edited code
-      legend.position = "none"
-    ) + # Left margin
-    theme_void() +
-    eval(rlang::parse_expr(color_palette)) +
-    theme(legend.position = "bottom")
-}
-
-
-extractorRData <- function(file, object = NULL) {
-  #' Function for extracting an object from a .RData file created by R's save() command
-  #' Inputs: RData file, object name (optional)
-  #' If object is NULL or empty, returns the whole environment
-
-  E <- new.env()
-  load(file = file, envir = E)
-
-  # If object is NULL or empty, return the whole environment
-  if (is.null(object) || object == "") {
-    return(E)
-  } else {
-    # Otherwise return the specified object from the environment
-    return(get(object, envir = E, inherits = FALSE))
-  }
-}
-
-
-extract_region_effects <- function(fit, region_var = "roi", parameter = "Intercept",
-                                   probs = c(0.025, 0.05, 0.5, 0.95, 0.975),
-                                   digits = 8, scale = 1) {
-  # Check if the fit object is from brms
-  if (!inherits(fit, "brmsfit")) {
-    stop("The 'fit' argument must be a brmsfit object")
-  }
-
-  # Extract posterior samples for population-level effects
-  aa <- fixef(fit, summary = FALSE) / scale
-
-  # Extract group-level (random) effects
-  bb <- ranef(fit, summary = FALSE)
-
-  # Check if the specified parameter exists
-  if (!parameter %in% colnames(aa)) {
-    stop(paste0("Parameter '", parameter, "' not found in the model"))
-  }
-
-  # Check if the specified region variable exists
-  if (!region_var %in% names(bb)) {
-    stop(paste0("Region variable '", region_var, "' not found in the model random effects"))
-  }
-
-  # Calculate number of posterior samples
-  ns <- nrow(aa)
-
-  # Calculate posterior samples at each region for the parameter
-  ps <- apply(bb[[region_var]][, , parameter], 2, "+", aa[, parameter])
-
-  # Create initial result data frame
-  result <- data.frame(
-    mean = apply(ps, 2, mean),
-    SD = apply(ps, 2, sd)
-  )
-
-  # Add P+ column (probability of effect being positive)
-  # Using quote() to preserve the "+" in the column name
-  p_plus <- apply(ps, 2, function(x) sum(x > 0) / ns)
-  result <- cbind(result, "P+" = p_plus)
-
-  # Add quantiles
-  quantiles <- t(apply(ps, 2, quantile, probs = probs))
-  colnames(quantiles) <- paste0(100 * probs, "%")
-
-  # Combine results
-  result <- cbind(result, quantiles)
-
-  # Round values to specified number of digits
-  result <- round(result, digits)
-
-  # Return the summarized results
-  return(result)
-}
-
-</document_content>
-</document>
-<document index="7">
+<document index="10">
 <source>./R/afni.R</source>
 <document_content>
 # Write data.frame to a file
@@ -1002,7 +1269,7 @@ ridge <- function(dat, xlim, labx, wi, hi) {
 
 </document_content>
 </document>
-<document index="8">
+<document index="11">
 <source>./R/assrproj-package.R</source>
 <document_content>
 #' assrproj: Tools for ASSR analysis
@@ -1014,7 +1281,7 @@ ridge <- function(dat, xlim, labx, wi, hi) {
 "_PACKAGE"
 </document_content>
 </document>
-<document index="9">
+<document index="12">
 <source>./R/config.R</source>
 <document_content>
 #' Allocate Stan/BRMS resources once per call
@@ -1041,326 +1308,19 @@ itpc_resources <- function(max_chains = NULL) {
 }
 </document_content>
 </document>
-<document index="10">
-<source>./R/models.R</source>
-<document_content>
-# Generic BRMS saver -----------------------------------------------------------
-fit_brms_generic <- function(
-    df,
-    formula,
-    file_stem,
-    family   = brms::student(),
-    iter     = 4000,
-    warmup   = 1000,
-    control  = list(adapt_delta = 0.95),
-    backend  = "cmdstanr",
-    ...
-) {
-  res <- itpc_resources()  # expects $chains, $cores, $threads
-  dir.create(here::here("fits"), recursive = TRUE, showWarnings = FALSE)
-  
-  brms::brm(
-    formula = formula,
-    data    = df,
-    family  = family,
-    backend = backend,
-    chains  = res$chains,
-    cores   = res$cores,
-    threads = res$threads,     # keep this consistent with your itpc_resources()
-    iter    = iter,
-    warmup  = warmup,
-    control = control,
-    file    = here::here("fits", file_stem),
-    file_refit = "on_change",
-    ...
-  )
-}
-
-save_pp_check <- function(fit) {
-  p <- brms::pp_check(fit, ndraws = 50)
-  out <- "figures/fig-ppcheck.png"
-  ggplot2::ggsave(out, p, width = 6, height = 4, dpi = 150)
-  out
-}
-</document_content>
-</document>
-<document index="11">
-<source>./R/targets_data_prep.R</source>
-<document_content>
-# R/data_prep.R
-
-
-#' Join ITPC and spectral-exponent data for modeling
-#'
-#' Reads two CSVs and builds a tidy table keyed by `subject`, `roi`, `P`, `T`, `S`.
-#'
-#' @details
-#' **Inclusion/Exclusion logic**
-#' - Keeps only ITPC rows where `type` is one of `"prestim_itpc"` or `"stim_itpc"`.
-#' - Maps `type` → `S` as: `"prestim_itpc"` → `"prestim"`, `"stim_itpc"` → `"stim"`.
-#' - In spectral params, renames `condition` to `S` and requires `S` to match the ITPC side.
-#' - Uses an inner join on `c(subject, roi, P, T, S)`; rows missing on either side are dropped.
-#'
-#' @section Output shape:
-#' A tibble with one row per `(subject, roi, P, T, S)` and columns:
-#' - `subject` (factor), `roi` (factor)
-#' - `P`, `T`
-#' - `S` (factor with levels `c("prestim","stim")`)
-#' - `itpc` (numeric), `exponent` (numeric)
-#'
-#' @param itpc_path Path to ITPC CSV with columns `subject, roi, P, T, type, value`.
-#' @param spec_path Path to spectral-params CSV with columns `subject, roi, P, T, condition, exponent`.
-#' @return A tibble ready for hierarchical modeling (e.g., with **brms**), containing only `prestim`/`stim` conditions and matched keys across sources.
-#'
-#' @examples
-#' \dontrun{
-#' df <- make_analysis_df(
-#'   "data/Destrieux_final_itpc.csv",
-#'   "data/specparam_all.csv"
-#' )
-#' }
-#' @export
-make_analysis_df <- function(itpc_path, spec_path) {
-  itpc <- readr::read_csv(itpc_path, show_col_types = FALSE) |>
-    dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) |>
-    dplyr::mutate(
-      S = dplyr::case_when(
-        type == "prestim_itpc" ~ "prestim",
-        type == "stim_itpc" ~ "stim",
-        TRUE ~ type
-      ),
-      itpc = value
-    ) |>
-    dplyr::select(subject, roi, P, T, S, itpc) |>
-    dplyr::distinct()
-
-  spec <- readr::read_csv(spec_path, show_col_types = FALSE) |>
-    dplyr::select(subject, roi, P, T, condition, exponent, offset) |>
-    dplyr::rename(S = condition) |>
-    dplyr::distinct()
-
-  out <- dplyr::inner_join(itpc, spec, by = c("subject", "roi", "P", "T", "S"))
-
-  # sanity check: no duplicates after join
-  post_dups <- out |>
-    dplyr::count(subject, roi, P, T, S, name = "n") |>
-    dplyr::filter(n > 1)
-  if (nrow(post_dups) > 0) {
-    stop("Join produced duplicates. Your inputs are still not unique on (subject, roi, P, T, S). Fix upstream.")
-  }
-
-  out |>
-    dplyr::mutate(
-      subject = factor(subject),
-      roi     = factor(roi),
-      S       = factor(S, levels = c("prestim", "stim"))
-    )
-}
-
-</document_content>
-</document>
-<document index="12">
-<source>./R/targets_visualizations.R</source>
-<document_content>
-# R/visualizations.R
-
-#' Create and save brain plot from brms fit
-#' @param fit brmsfit object
-#' @param parameter Which parameter to plot (e.g., "Intercept", "exponent")
-#' @param region_var Name of the region variable (default "roi")
-#' @param filltype Color palette for brain plot
-#' @param filter_significant If TRUE, only plot regions with P+ > 0.95 or P+ < 0.05
-#' @param title Plot title
-#' @param filename Output filename (without extension)
-#' @param width Plot width in inches
-#' @param height Plot height in inches
-#' @return Path to saved plot file
-create_brain_plot <- function(fit, parameter = "Intercept", region_var = "roi", 
-                              filltype = "RdBu", filter_significant = TRUE,
-                              title = NULL, filename = NULL, 
-                              width = 10, height = 6) {
-  
-  # Wrap everything in tryCatch to prevent script crashes
-  tryCatch({
-    
-    # Load required libraries and data
-    library(ggsegDesterieux)
-    library(ggplot2)
-    library(dplyr)
-    library(readr)
-    
-    # Extract region-specific effects
-    effects <- extract_region_effects(
-      fit = fit,
-      region_var = region_var,
-      parameter = parameter,
-      digits = 4
-    )
-    
-    # Create results dataframe with roi names
-    results_df <- data.frame(
-      label = rownames(effects),  # ggseg uses 'label' for region names
-      mean_effect = effects$mean,
-      pplus = effects$`P+`,
-      lower95 = effects$`2.5%`,
-      upper95 = effects$`97.5%`,
-      stringsAsFactors = FALSE
-    ) %>%
-      mutate(
-        significant = (pplus > 0.95) | (pplus < 0.05),
-        effect_direction = case_when(
-          mean_effect > 0 ~ "positive",
-          mean_effect < 0 ~ "negative", 
-          TRUE ~ "none"
-        )
-      )
-    
-    # Count significant effects
-    n_significant <- sum(results_df$significant)
-    
-    # Handle case with no significant effects
-    if (filter_significant && n_significant == 0) {
-      warning(paste0("No significant effects found for parameter '", parameter, 
-                     "' (P+ > 0.95 or P+ < 0.05). Plotting all regions instead."))
-      plot_df <- results_df  # Use all regions instead of returning NULL
-      filter_significant <- FALSE  # Update flag for filename
-    } else if (filter_significant) {
-      plot_df <- results_df %>% filter(significant)
-    } else {
-      plot_df <- results_df
-    }
-    
-    # Create brain plot with error handling
-    p <- tryCatch({
-      my_brain_plot(
-        df = plot_df,
-        atlas_df = desterieux,  # from ggsegDesterieux
-        parameter = mean_effect,
-        filltype = filltype,
-        legend = TRUE
-      )
-    }, error = function(e) {
-      warning(paste0("Error creating brain plot: ", e$message))
-      return(NULL)
-    })
-    
-    # If brain plot failed, return NULL
-    if (is.null(p)) {
-      warning("Brain plot creation failed, returning NULL")
-      return(NULL)
-    }
-    
-    # Add title if provided
-    if (!is.null(title)) {
-      p <- p + ggtitle(title)
-    }
-    
-    # Create filename if not provided
-    if (is.null(filename)) {
-      significance_suffix <- if(filter_significant) "_significant" else "_all"
-      filename <- paste0("brain_plot_", gsub(":", "_", parameter), significance_suffix)
-    }
-    
-    # Ensure figures directory exists
-    dir.create("figures", recursive = TRUE, showWarnings = FALSE)
-    
-    # Save plot with error handling
-    output_path <- file.path("figures", paste0(filename, ".png"))
-    tryCatch({
-      ggsave(
-        filename = output_path,
-        plot = p,
-        width = width,
-        height = height,
-        dpi = 300,
-        bg = "white"
-      )
-    }, error = function(e) {
-      warning(paste0("Error saving plot: ", e$message))
-      return(NULL)
-    })
-    
-    # Also save the underlying data with error handling
-    data_path <- file.path("figures", paste0(filename, "_data.csv"))
-    tryCatch({
-      write_csv(results_df, data_path)
-    }, error = function(e) {
-      warning(paste0("Error saving data: ", e$message))
-    })
-    
-    # Print summary
-    cat(sprintf(
-      "Brain plot created: %s\n- Total regions: %d\n- Significant regions: %d\n- Parameter: %s\n", 
-      output_path, 
-      nrow(results_df), 
-      n_significant,
-      parameter
-    ))
-    
-    # Additional helpful message if no significant effects
-    if (n_significant == 0) {
-      cat("Note: No regions showed significant effects (P+ > 0.95 or P+ < 0.05)\n")
-    }
-    
-    return(output_path)
-    
-  }, error = function(e) {
-    # Catch any unexpected errors
-    warning(paste0("create_brain_plot failed for parameter '", parameter, "': ", e$message))
-    return(NULL)
-  })
-}
-#' Create summary statistics plot from effects
-#' @param fit brmsfit object  
-#' @param parameter Parameter to analyze
-#' @param filename Output filename
-create_effects_summary_plot <- function(fit, parameter = "Intercept", 
-                                        filename = "effects_summary") {
-  
-  effects <- extract_region_effects(fit, parameter = parameter)
-  
-  # Create summary dataframe
-  summary_df <- data.frame(
-    roi = rownames(effects),
-    mean = effects$mean,
-    lower = effects$`2.5%`,
-    upper = effects$`97.5%`,
-    pplus = effects$`P+`
-  ) %>%
-    mutate(
-      significant = (pplus > 0.95) | (pplus < 0.05),
-      roi = factor(roi, levels = roi[order(mean)])
-    )
-  
-  # Create forest plot
-  p <- ggplot(summary_df, aes(x = mean, y = roi, color = significant)) +
-    geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5) +
-    geom_pointrange(aes(xmin = lower, xmax = upper), size = 0.3) +
-    scale_color_manual(values = c("FALSE" = "gray60", "TRUE" = "red")) +
-    labs(
-      title = paste("Regional Effects:", parameter),
-      x = paste(parameter, "Effect Size"),
-      y = "Brain Region",
-      color = "Significant"
-    ) +
-    theme_minimal() +
-    theme(
-      axis.text.y = element_text(size = 8),
-      legend.position = "bottom"
-    )
-  
-  # Save plot
-  dir.create("figures", recursive = TRUE, showWarnings = FALSE)
-  output_path <- file.path("figures", paste0(filename, ".png"))
-  ggsave(output_path, p, width = 12, height = 8, dpi = 150)
-  
-  return(output_path)
-}
-</document_content>
-</document>
 <document index="13">
-<source>./R/utils_io.R</source>
+<source>./R/utils.R</source>
 <document_content>
+library(ggseg)
+library(ggplot2)
+library(tibble)
+library(readr)
+library(dplyr)
+library(scico)
+library(ggsegDesterieux)
+library(RColorBrewer)
+
+
 write_df_csv <- function(df, path) {
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   # deterministic ordering to avoid noisy diffs across rebuilds
@@ -1370,6 +1330,137 @@ write_df_csv <- function(df, path) {
   file.rename(tmp, path)
   path  # return the file path so targets can track it
 }
+
+my_brain_plot <- function(df, atlas_df, parameter, filltype = "Blues", legend = FALSE) {
+  # Define the expressions for each color palette
+  Blues_expr <- 'scale_fill_distiller(palette = "Blues", direction = 1)'
+  BuGn_expr <- 'scale_fill_distiller(palette = "BuGn", direction = 1)'
+  Purples_expr <- 'scale_fill_distiller(palette = "Purples", direction = 1)'
+  Vik_expr <- 'scale_fill_scico(palette = "vik",midpoint = 0)'
+  # -1 reverses direction scales 
+  RdBu_expr <- 'scale_fill_distiller(palette = "RdBu", direction = -1)' 
+  RdYlBu_expr <- 'scale_fill_distiller(palette = "RdYlBu", direction = -1)'
+  Spectral_expr <- 'scale_fill_distiller(palette = "Spectral", direction = 1)'
+
+
+
+  # Use switch to select the appropriate expression based on filtype
+  color_palette <- switch(filltype,
+    "Blues" = Blues_expr,
+    "BuGn" = BuGn_expr,
+    "Purples" = Purples_expr,
+    "Vik" = Vik_expr,
+    "RdBu" = RdBu_expr,
+    "RdYlBu" = RdYlBu_expr,
+    "Spectral" = Spectral_expr,
+    stop("Unknown filltype") # Default case if none of the above matches
+  )
+  # Go further with analysis
+  parameter <- enquo(parameter)
+  df_combined <- atlas_df %>%
+    as_tibble() %>%
+    left_join(df) %>%
+    as_brain_atlas()
+
+  p <- ggplot() +
+    ggseg::geom_brain(
+      atlas = df_combined,
+      mapping = aes(fill = !!parameter),
+      position = position_brain(side ~ hemi),
+      show.legend = legend
+    ) +
+    theme(
+      panel.background = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.ticks = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      plot.background = element_rect(fill = "transparent", colour = NA),
+      plot.margin = unit(c(-1, -1.2, -1.2, -1.5), "cm"), # Edited code
+      legend.position = "none"
+    ) + # Left margin
+    theme_void() +
+    eval(rlang::parse_expr(color_palette)) +
+    theme(legend.position = "bottom")
+}
+
+
+extractorRData <- function(file, object = NULL) {
+  #' Function for extracting an object from a .RData file created by R's save() command
+  #' Inputs: RData file, object name (optional)
+  #' If object is NULL or empty, returns the whole environment
+
+  E <- new.env()
+  load(file = file, envir = E)
+
+  # If object is NULL or empty, return the whole environment
+  if (is.null(object) || object == "") {
+    return(E)
+  } else {
+    # Otherwise return the specified object from the environment
+    return(get(object, envir = E, inherits = FALSE))
+  }
+}
+
+
+extract_region_effects <- function(fit, region_var = "roi", parameter = "Intercept",
+                                   probs = c(0.025, 0.05, 0.5, 0.95, 0.975),
+                                   digits = 8, scale = 1) {
+  # Check if the fit object is from brms
+  if (!inherits(fit, "brmsfit")) {
+    stop("The 'fit' argument must be a brmsfit object")
+  }
+
+  # Extract posterior samples for population-level effects
+  aa <- fixef(fit, summary = FALSE) / scale
+
+  # Extract group-level (random) effects
+  bb <- ranef(fit, summary = FALSE)
+
+  # Check if the specified parameter exists
+  if (!parameter %in% colnames(aa)) {
+    stop(paste0("Parameter '", parameter, "' not found in the model"))
+  }
+
+  # Check if the specified region variable exists
+  if (!region_var %in% names(bb)) {
+    stop(paste0("Region variable '", region_var, "' not found in the model random effects"))
+  }
+
+  # Calculate number of posterior samples
+  ns <- nrow(aa)
+
+  # Calculate posterior samples at each region for the parameter
+  ps <- apply(bb[[region_var]][, , parameter], 2, "+", aa[, parameter])
+
+  # Create initial result data frame
+  result <- data.frame(
+    mean = apply(ps, 2, mean),
+    SD = apply(ps, 2, sd)
+  )
+
+  # Add P+ column (probability of effect being positive)
+  # Using quote() to preserve the "+" in the column name
+  p_plus <- apply(ps, 2, function(x) sum(x > 0) / ns)
+  result <- cbind(result, "P+" = p_plus)
+
+  # Add quantiles
+  quantiles <- t(apply(ps, 2, quantile, probs = probs))
+  colnames(quantiles) <- paste0(100 * probs, "%")
+
+  # Combine results
+  result <- cbind(result, quantiles)
+
+  # Round values to specified number of digits
+  result <- round(result, digits)
+
+  # Return the summarized results
+  return(result)
+}
+
 </document_content>
 </document>
 <document index="14">

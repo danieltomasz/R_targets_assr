@@ -1,22 +1,29 @@
 library(targets)
 library(tarchetypes)
 
-# Packages ----
+# Load your dev package code on every run so function hashes update.
+# if (file.exists("DESCRIPTION")) {
+#   pkgload::load_all(export_all = FALSE, helpers = FALSE, attach_testthat = FALSE)
+# }
 
+# Source plan fragments / helper scripts that define objects like `itpc_compare_targets`.
+targets::tar_source("targets")   # sources all *.R under targets/
+targets::tar_source("R")   # sources all *.R under targets/
 
+# If R/ were just loose scripts (NOT a package), you would do:
+# targets::tar_source("R")
 
 tar_option_set(
   packages = c("readr", "dplyr", "brms", "ggplot2", "cmdstanr"),
-  workspace_on_error = TRUE
+  workspace_on_error = TRUE,
+  cue = tar_cue(mode = "thorough")  # rehash globals/functions, not just timestamps
 )
 
-targets::tar_source() # sources all R/*.R and tracks them for invalidation
-
-# Data Preparation ----
+# ----------------- Data prep -----------------
 data_targets <- list(
-  # raw inputs tracked as files
   tar_target(itpc_csv, "data/Destrieux_final_itpc.csv", format = "file"),
-  tar_target(spec_csv, "data/specparam_all.csv", format = "file", description= "load specparam parametrisation data"),
+  tar_target(spec_csv, "data/specparam_all.csv", format = "file",
+             description = "load specparam parametrisation data"),
 
   # join + tidy (in memory)
   tar_target(analysis_df, make_analysis_df(itpc_csv, spec_csv),  description = "Join ITPC and spectral-exponent data for modeling"),
@@ -228,4 +235,5 @@ vignette_targets <- list(
 
 
 # IMPORTANT: return ONE flat plan (don’t nest lists)
-c(data_targets, model_itpc, model_exponent,  vignette_targets, itpc_compare_targets)
+#c(data_targets, model_itpc, model_exponent,  vignette_targets)
+c(itpc_compare_targets)

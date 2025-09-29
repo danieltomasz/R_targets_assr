@@ -22,3 +22,5 @@ _archive/
 **/*cache*/
 **/*cache**/
 sandbox/
+notebooks/sandbox/
+**.Rdata
