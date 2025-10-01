@@ -84,39 +84,115 @@ Structure of auditory stimulation. Adapted from @pellegrino2019TranscranialDirec
 
 #  Current study
 
-###  Mapping of value distributions of variables of interest
-To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we used a bayes an RBA  package which allow to quantify the difference.
+###  Distribution of variables of interest
+
+To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we used a bayesian  approach - an RBA toolbox [@chen2019HandlingMultiplicityNeuroimaging]  based on `rbms` package which allow to quantify the difference between condition and probabilty P+ of effect being positive or negative.
+
+The distribution is presented in the @fig-itpc.
 
 
 ```{r}
+#| label: fig-itpc
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of ITPC values and their differences between PRESTIM and STIM soud stimulation condition"
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+# packages
 library(dplyr)
+library(tidyr)
+library(readr)
+library(here)
 library(ggplot2)
-library(ggdist)  
-itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) |>
-  dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) |>
-  dplyr::mutate(
-    S = dplyr::case_when(
+library(ggdist)
+library(patchwork)
+library(scales)  # for nice breaks
+
+# --- load & tidy ---
+itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) %>%
+  dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) %>%
+  mutate(
+    S = case_when(
       type == "prestim_itpc" ~ "prestim",
-      type == "stim_itpc" ~ "stim",
+      type == "stim_itpc"    ~ "stim",
       TRUE ~ type
     ),
     itpc = value
-  ) |>
-  dplyr::select(subject, roi, P, T, S, itpc) |>
-  dplyr::distinct() #|>
-#  dplyr::filter(P == "pre")
+  ) %>%
+  select(subject, roi, P, T, S, itpc) %>%
+  distinct()
 
-head(itpc)
+# (optional but safe) average duplicate rows first
+itpc_avg <- itpc %>%
+  group_by(subject, roi, S) %>%
+  summarise(itpc = mean(itpc, na.rm = TRUE), .groups = "drop")
 
-p_halfeye <- ggplot(itpc, aes(y = S, x = itpc, fill = S)) +
+# wide format + within-subject difference
+itpc_wide <- itpc_avg %>%
+  mutate(S = factor(S, levels = c("prestim", "stim"))) %>%
+  pivot_wider(names_from = S, values_from = itpc) %>%
+  drop_na(prestim, stim) %>%
+  mutate(diff_itpc = stim - prestim)
+
+
+# --- shared x from data ---
+vals_cond <- itpc_avg$itpc
+vals_diff <- itpc_wide$diff_itpc
+
+rng          <- range(c(vals_cond, vals_diff), na.rm = TRUE)
+pad          <- diff(rng) * 0.04
+xlim_shared  <- c(rng[1] - pad, rng[2] + pad)
+breaks_shared <- breaks_extended(n = 7)(c(vals_cond, vals_diff))
+
+# ITPC by condition
+p_cond <- ggplot(itpc_avg, aes(x = itpc, y = S, fill = S)) +
   stat_halfeye(point_interval = median_qi,
                .width = c(0.50, 0.80, 0.95),
                adjust = 0.7, slab_alpha = 0.6) +
-  scale_x_continuous(limits = c(0, 1)) +
-  labs(title = "Half-eye: distribution and quantile intervals", x = "ITPC", y = NULL) +
-  theme(legend.position = "none")
-p_halfeye 
+  scale_x_continuous(limits = xlim_shared,
+                     breaks = breaks_shared,
+                     expand = expansion(mult = c(0, 0.02))) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none",
+        plot.title = element_blank(),
+        axis.text.x  = element_blank(),
+        axis.ticks.x = element_blank())
+
+# Paired differences (stim − prestim)
+p_diff <- ggplot(itpc_wide, aes(x = diff_itpc, y = "stim − prestim")) +
+  stat_halfeye(point_interval = median_qi,
+               .width = c(0.50, 0.80, 0.95),
+               adjust = 0.7, slab_alpha = 0.6, fill = "grey60") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_x_continuous(limits = xlim_shared,
+                     breaks = breaks_shared,
+                     expand = expansion(mult = c(0, 0.02))) +
+  labs(x = "Shared x-axis (from data)", y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_blank())
+
+p_combined <- p_cond / p_diff + patchwork::plot_layout(heights = c(2, 1))
+p_combined
 ```
+
+For both PRESTIM and STIM condition I want to check differences in  other conditions, in order to see if I can collapse conditions, but model  `itpc ~ 1 + P*T + (P*T|roi) + (1|subject)` is too complex and have a convergence issues. Instead I am using RBA ans pairs of simpler models 
+
+Before we were collapsed data we wanted to check the differences using RBA 
+
+Now I want to run model via targets
+
+Now I want to  extract the ITPC data and visualise it across the scalp 
+
+
+
+
+`
+
 
 We conducted a Bayesian multilevel analysis using the brms package [@burkner2017BrmsPackageBayesian] in R ( R version `4.5.1` and brms version `2.23`). We use `targets` package to document our pipeline analysis with the code available on github and artefacts and code on OSF.
 

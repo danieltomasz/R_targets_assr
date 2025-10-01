@@ -1,11 +1,10 @@
 .PHONY: help doc load reload r
 
-RSCRIPT=Rscript --quiet --vanilla
-
+RSCRIPT=Rscript --quiet --vanillaz
 help:
 	@echo "make doc     - Run devtools::document()"
 	@echo "make load    - Load pkg in a fresh R session (won't affect your current one)"
-	@echo "make reload  - doc + load (fresh session)"
+	@echo "make reload  - doc + load (fresh session)"d
 	@echo "make r       - Start R; your .Rprofile can auto-load the pkg"
 
 doc:

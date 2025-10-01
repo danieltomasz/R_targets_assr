@@ -8,7 +8,7 @@ Run make equivalent and see the result as vignette
 
 ```{r}
 targets::tar_make()
-browseURL("_output/vignettes/01_simple_brms.html")
+#browseURL("_output/vignettes/01_simple_brms.html")
 ```
 
 ## if you using quarto, remember to check if there any `_quarto.yml` a level above, interfering with your project
@@ -356,8 +356,8 @@ vignette_targets <- list(
 
 
 # IMPORTANT: return ONE flat plan (don’t nest lists)
-c(data_targets, model_itpc, model_exponent,  vignette_targets)
-
+#c(data_targets, model_itpc, model_exponent,  vignette_targets)
+c(itpc_compare_targets)
 </document_content>
 </document>
 <document index="4">
@@ -389,8 +389,8 @@ library(brms)
 
 # Test in R console first:
 library(here)
-source(here::here("R", "Utils.R"))
-source(here::here("R", "targets_visualizations.R"))
+source(here::here("R", "utils.R"))
+source(here::here("targets", "targets_visualizations.R"))
 
 # Check if functions exist:
 exists("create_brain_plot")
@@ -450,7 +450,270 @@ Structure of auditory stimulation. Adapted from @pellegrino2019TranscranialDirec
 #  Current study
 
 ###  Mapping of value distributions of variables of interest
-To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we conducted a Bayesian multilevel analysis using the brms package [@burkner2017BrmsPackageBayesian] in R ( R version `4.5.1` and brms version `2.23`). We use `targets` package to document our pipeline analysis with the code available on github and artefacts and code on OSF.
+To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we used a bayes an RBA  package which allow to quantify the difference.
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of ITPC values and their differences between PRESTIM and STIM soud stimulation condition"
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+# packages
+library(dplyr)
+library(tidyr)
+library(readr)
+library(here)
+library(ggplot2)
+library(ggdist)
+library(patchwork)
+
+# --- load & tidy ---
+itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) %>%
+  dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) %>%
+  mutate(
+    S = case_when(
+      type == "prestim_itpc" ~ "prestim",
+      type == "stim_itpc"    ~ "stim",
+      TRUE ~ type
+    ),
+    itpc = value
+  ) %>%
+  select(subject, roi, P, T, S, itpc) %>%
+  distinct()
+
+# (optional but safe) average duplicate rows first
+itpc_avg <- itpc %>%
+  group_by(subject, roi, S) %>%
+  summarise(itpc = mean(itpc, na.rm = TRUE), .groups = "drop")
+
+# wide format + within-subject difference
+itpc_wide <- itpc_avg %>%
+  mutate(S = factor(S, levels = c("prestim", "stim"))) %>%
+  pivot_wider(names_from = S, values_from = itpc) %>%
+  drop_na(prestim, stim) %>%
+  mutate(diff_itpc = stim - prestim)
+
+library(scales)  # for nice breaks
+
+# --- shared x from data ---
+vals_cond <- itpc_avg$itpc
+vals_diff <- itpc_wide$diff_itpc
+
+rng          <- range(c(vals_cond, vals_diff), na.rm = TRUE)
+pad          <- diff(rng) * 0.04
+xlim_shared  <- c(rng[1] - pad, rng[2] + pad)
+breaks_shared <- breaks_extended(n = 7)(c(vals_cond, vals_diff))
+
+# ITPC by condition
+p_cond <- ggplot(itpc_avg, aes(x = itpc, y = S, fill = S)) +
+  stat_halfeye(point_interval = median_qi,
+               .width = c(0.50, 0.80, 0.95),
+               adjust = 0.7, slab_alpha = 0.6) +
+  scale_x_continuous(limits = xlim_shared,
+                     breaks = breaks_shared,
+                     expand = expansion(mult = c(0, 0.02))) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none",
+        plot.title = element_blank(),
+        axis.text.x  = element_blank(),
+        axis.ticks.x = element_blank())
+
+# Paired differences (stim − prestim)
+p_diff <- ggplot(itpc_wide, aes(x = diff_itpc, y = "stim − prestim")) +
+  stat_halfeye(point_interval = median_qi,
+               .width = c(0.50, 0.80, 0.95),
+               adjust = 0.7, slab_alpha = 0.6, fill = "grey60") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_x_continuous(limits = xlim_shared,
+                     breaks = breaks_shared,
+                     expand = expansion(mult = c(0, 0.02))) +
+  labs(x = "Shared x-axis (from data)", y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_blank())
+
+p_combined <- p_cond / p_diff + patchwork::plot_layout(heights = c(2, 1))
+p_combined
+```
+
+Now I want to run model via targets
+
+Now I want to  extract the ITPC data and visualise it across the scalp 
+```{r}
+# ---- deps ----
+library(dplyr)
+library(readr)
+library(stringr)
+library(ggseg)
+library(ggsegDesterieux)   # provides `desterieux`
+library(patchwork)
+
+# -----------------------------
+# 1) Read RBA EOI table (per ROI)
+# -----------------------------
+rba <- read.delim(here::here("notebooks", "itpc_diff_rba.txt"), comment.char = "#") %>%
+  janitor::clean_names()
+
+# >>> ADJUST HERE if your column names differ <<<
+# Try to standardize to: region, mean, sd, lower, upper, p_plus
+rba <- rba %>%
+  rename(
+    region = dplyr::coalesce(
+      dplyr::pick(where(is.character)) %>% dplyr::select(matches("^roi$|^region$|label$")) %>% dplyr::last_col()
+    ),
+    mean   = dplyr::coalesce(dplyr::pick(matches("^mean$|post.*mean|median$|beta$|b$")) %>% dplyr::last_col()),
+    sd     = dplyr::coalesce(dplyr::pick(matches("^sd$|se$")) %>% dplyr::last_col()),
+    lower  = dplyr::coalesce(dplyr::pick(matches("lower|2\\.5|025")) %>% dplyr::last_col()),
+    upper  = dplyr::coalesce(dplyr::pick(matches("upper|97\\.5|975")) %>% dplyr::last_col()),
+    p_plus = dplyr::coalesce(dplyr::pick(matches("pr.*0|p\\+|pd")) %>% dplyr::last_col())
+  ) %>%
+  dplyr::select(region, mean, sd, lower, upper, p_plus)
+
+# -----------------------------
+# 2) Make ROI names joinable
+# -----------------------------
+norm_roi <- function(x){
+  x %>%
+    tolower() %>%
+    str_replace_all("ctx-|lh-|rh-|^r-|^l-", "") %>%
+    str_replace_all("_|-", " ") %>%
+    str_squish()
+}
+
+atlas <- ggsegDesterieux::desterieux %>%
+  mutate(region_norm = norm_roi(region)) %>%
+  distinct(region, region_norm, hemi, side, atlas)
+
+rba_j <- rba %>%
+  mutate(region_norm = norm_roi(region)) %>%
+  left_join(atlas %>% distinct(region_norm, region_atlas = region), by = "region_norm") %>%
+  mutate(region = coalesce(region_atlas, region)) %>%
+  select(-region_norm, -region_atlas)
+
+# Sanity check: unmatched ROIs (fix by hand if any)
+unmatched <- anti_join(rba_j, atlas, by = "region")
+if(nrow(unmatched)){
+  warning("Some ROI names did not match the atlas:\n",
+          paste0(" - ", unmatched$region, collapse = "\n"))
+}
+
+# -----------------------------
+# 3) Extra derived measure: evidence (0..1) with direction
+# -----------------------------
+rba_j <- rba_j %>%
+  mutate(
+    # evidence strength away from 0.5, signed by mean
+    evidence = (abs(p_plus - 0.5) * 2) * sign(mean)
+  )
+
+# -----------------------------
+# 4) Brain maps (uses your my_brain_plot)
+# -----------------------------
+atlas_df <- ggsegDesterieux::desterieux
+
+# Posterior mean (ΔITPC), diverging around 0
+p_mean <- my_brain_plot(df = rba_j, atlas_df = atlas_df,
+                        parameter = mean, filltype = "Vik", legend = TRUE)
+
+# Evidence map (signed PD): negatives toward prestim, positives toward stim
+p_evidence <- my_brain_plot(df = rba_j, atlas_df = atlas_df,
+                            parameter = evidence, filltype = "RdBu", legend = TRUE)
+
+# Put them side by side
+p_brain <- p_mean + p_evidence + plot_layout(ncol = 2)
+p_brain
+```
+
+```{r}
+# deps
+library(tidyverse)
+library(ggseg)
+library(ggsegDesterieux)  # atlas object: desterieux
+library(patchwork)
+
+# --- read just the "RBA results" table from the AFNI text report ---
+read_rba_region_table <- function(path){
+  raw <- readLines(path, warn = FALSE)
+
+  # find the start of the RBA region-effects section
+  s <- grep("^===== Summary of region effects for Intercept \\(RBA results\\) =====$", raw)
+  if(length(s) == 0) stop("Could not find the 'RBA results' section in: ", path)
+
+  # grab lines until the next '=====' section header (or EOF)
+  chunk <- raw[(s+1):length(raw)]
+  e <- grep("^===== ", chunk)
+  if(length(e)) chunk <- chunk[1:(e[1]-1)]
+  # drop blanks
+  chunk <- chunk[nchar(trimws(chunk)) > 0]
+
+  # the first line is the header that lacks the ROI column; drop it
+  if(length(chunk) && grepl("^\\s*mean\\b", chunk[1])) chunk <- chunk[-1]
+
+  header <- c("region","mean","SD","P+","2.5%","5%","50%","95%","97.5%")
+  as_tibble(read.table(text = paste(chunk, collapse = "\n"),
+                       header = FALSE, col.names = header,
+                       check.names = FALSE, stringsAsFactors = FALSE))
+}
+
+# --- parse your file ---
+rba_tbl <- read_rba_region_table(here::here("notebooks","itpc_diff_rba.txt"))
+
+# --- harmonize names to atlas (keep hemisphere!) ---
+norm_core <- function(x){
+  x |> tolower() |>
+    gsub("^ctx-", "", x) |>
+    gsub("^(lh|rh)_", "", x) |>
+    gsub("_", " ", ., fixed = TRUE) |>
+    trimws()
+}
+
+rba_for_plot <- rba_tbl %>%
+  mutate(
+    hemi = case_when(
+      grepl("^lh_", region) ~ "left",
+      grepl("^rh_", region) ~ "right",
+      TRUE ~ NA_character_
+    ),
+    region_plot = gsub("^(lh|rh)_", "", region)  # atlas uses region names without lh_/rh_
+  ) %>%
+  # signed 'evidence' in [−1, +1]; needs backticks for the non-syntactic name P+
+  mutate(evidence = (abs(`P+` - 0.5) * 2) * sign(mean)) %>%
+  # final columns to join on: region + hemi
+  transmute(region = region_plot, hemi, mean, evidence, p_plus = `P+`,
+            sd = SD, q025 = `2.5%`, q975 = `97.5%`)
+
+# quick sanity check: unmatched atlas keys (should be zero)
+atlas_keys <- ggsegDesterieux::desterieux %>% distinct(region, hemi)
+unmatched <- anti_join(rba_for_plot, atlas_keys, by = c("region","hemi"))
+if(nrow(unmatched)){
+  warning("Unmatched ROI labels after normalization:\n",
+          paste0(" - ", unmatched$hemi, " ", unmatched$region, collapse = "\n"))
+}
+
+# --- plots with your helper ---
+atlas_df <- ggsegDesterieux::desterieux
+
+p_mean <- my_brain_plot(df = rba_for_plot, atlas_df = atlas_df,
+                        parameter = mean, filltype = "Vik", legend = TRUE)
+
+p_ev <- my_brain_plot(df = rba_for_plot, atlas_df = atlas_df,
+                      parameter = evidence, filltype = "RdBu", legend = TRUE)
+
+p_brain <- p_mean + p_ev + plot_layout(ncol = 2)
+p_brain
+
+# (optional) show in a new window regardless of OS
+dev.new(width = 12, height = 6); print(p_brain)
+```
+
+
+
+We conducted a Bayesian multilevel analysis using the brms package [@burkner2017BrmsPackageBayesian] in R ( R version `4.5.1` and brms version `2.23`). We use `targets` package to document our pipeline analysis with the code available on github and artefacts and code on OSF.
 
 ::: {.callout-note}
 ## Question 1
@@ -573,8 +836,6 @@ We found insufficient evidence for tDCS × time interaction effects on ITPC (no 
 
 
 
-
-
 We observed a strong effect of auditory stimulus on ITPC in auditory and related regions. However, there was no evidence that the sound stimulation directly affected the spectral exponent. We also examined how the spectral exponent influenced ITPC.
 
 
@@ -644,6 +905,9 @@ Before examining the relationship between spectral exponent and ITPC, we first v
 <document index="5">
 <source>./targets/_targets_itpc.R</source>
 <document_content>
+
+# in the file below I want to load itpc and 
+# 1) compute the differences between conditions
 itpc_compare_targets <- list(
   tar_target(
     joined_data_for_itpc_comparison_run,
@@ -772,6 +1036,64 @@ make_analysis_df <- function(itpc_path, spec_path) {
 </document_content>
 </document>
 <document index="8">
+<source>./targets/targets_rba.R</source>
+<document_content>
+suppressPackageStartupMessages({
+  library(dplyr); library(tidyr); library(readr); library(processx)
+})
+
+# in_long must have columns: subject, roi, S (values: prestim, stim), itpc
+build_rba_diff <- function(in_long, out_tsv) {
+  df <- readr::read_tsv(in_long, show_col_types = FALSE)
+  
+  req <- c("subject","roi","S","itpc")
+  miss <- setdiff(req, names(df))
+  if (length(miss)) stop("Missing columns in input: ", paste(miss, collapse=", "))
+  
+  if (!all(c("prestim","stim") %in% unique(df$S)))
+    stop("S must contain exactly the two levels: 'prestim' and 'stim'.")
+  
+  wide <- df %>%
+    group_by(subject, roi, S) %>%
+    summarise(itpc = mean(itpc, na.rm = TRUE), .groups = "drop") %>%
+    mutate(S = factor(S, levels = c("prestim","stim"))) %>%
+    pivot_wider(names_from = S, values_from = itpc)
+  
+  out <- wide %>%
+    transmute(Subj = subject, ROI = roi, Y = stim - prestim) %>%
+    tidyr::drop_na(Y)
+  
+  dir.create(dirname(out_tsv), showWarnings = FALSE, recursive = TRUE)
+  readr::write_tsv(out, out_tsv)
+  out_tsv
+}
+
+run_rba <- function(data_tsv, prefix, chains = 4, iterations = 2000, distY = "student") {
+  rba <- Sys.which("RBA")
+  if (rba == "") stop("RBA not found on PATH. Fix PATH or pass absolute path.")
+  
+  dir.create(dirname(prefix), showWarnings = FALSE, recursive = TRUE)
+  
+  cmd <- sprintf(
+    "%s -prefix %s -chains %d -iterations %d -model 1 -EOI Intercept -distY %s -dataTable %s",
+    shQuote(rba), shQuote(prefix), chains, iterations, shQuote(distY), shQuote(data_tsv)
+  )
+  
+  # run and fail fast if RBA errors
+  res <- processx::run(command = "bash", args = c("-lc", cmd), error_on_status = TRUE)
+  
+  # RBA writes <prefix>.txt
+  out_txt <- paste0(prefix, ".txt")
+  if (!file.exists(out_txt)) stop("RBA completed but output not found: ", out_txt)
+  out_txt
+}
+
+read_rba <- function(txt_path) {
+  read.delim(txt_path, comment.char = "#", check.names = FALSE)
+}
+</document_content>
+</document>
+<document index="9">
 <source>./targets/targets_visualizations.R</source>
 <document_content>
 # R/visualizations.R
@@ -970,7 +1292,7 @@ create_effects_summary_plot <- function(fit, parameter = "Intercept",
 }
 </document_content>
 </document>
-<document index="9">
+<document index="10">
 <source>./tests/testthat.R</source>
 <document_content>
 # This file is part of the standard setup for testthat.
@@ -988,7 +1310,7 @@ test_check("assrproj")
 
 </document_content>
 </document>
-<document index="10">
+<document index="11">
 <source>./R/afni.R</source>
 <document_content>
 # Write data.frame to a file
@@ -1269,7 +1591,7 @@ ridge <- function(dat, xlim, labx, wi, hi) {
 
 </document_content>
 </document>
-<document index="11">
+<document index="12">
 <source>./R/assrproj-package.R</source>
 <document_content>
 #' assrproj: Tools for ASSR analysis
@@ -1281,7 +1603,7 @@ ridge <- function(dat, xlim, labx, wi, hi) {
 "_PACKAGE"
 </document_content>
 </document>
-<document index="12">
+<document index="13">
 <source>./R/config.R</source>
 <document_content>
 #' Allocate Stan/BRMS resources once per call
@@ -1308,7 +1630,7 @@ itpc_resources <- function(max_chains = NULL) {
 }
 </document_content>
 </document>
-<document index="13">
+<document index="14">
 <source>./R/utils.R</source>
 <document_content>
 library(ggseg)
@@ -1463,7 +1785,7 @@ extract_region_effects <- function(fit, region_var = "roi", parameter = "Interce
 
 </document_content>
 </document>
-<document index="14">
+<document index="15">
 <source>./renv/activate.R</source>
 <document_content>
 
@@ -2800,6 +3122,380 @@ local({
   invisible()
 
 })
+
+</document_content>
+</document>
+<document index="16">
+<source>./notebooks/TEST_RBA.qmd</source>
+<document_content>
+---
+title: "TEST_RBA"
+format: typst-pdf
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggdist)  
+library(tidyr)
+library(patchwork)
+
+itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) |>
+  dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) |>
+  dplyr::mutate(
+    S = dplyr::case_when(
+      type == "prestim_itpc" ~ "prestim",
+      type == "stim_itpc" ~ "stim",
+      TRUE ~ type
+    ),
+    itpc = value
+  ) |>
+  dplyr::select(subject, roi, P, T, S, itpc) |>
+  dplyr::distinct() #|>
+#  dplyr::filter(P == "pre")
+
+head(itpc)
+
+
+
+# (Optional but safe) collapse duplicates first
+itpc_avg <- itpc %>%
+  group_by(subject, roi, S) %>%
+  summarise(itpc = mean(itpc, na.rm = TRUE), .groups = "drop")
+
+# Wide format: one row per subject × roi × T
+itpc_wide <- itpc_avg %>%
+  mutate(S = factor(S, levels = c("prestim", "stim"))) %>%  # ensure column order
+  pivot_wider(
+    names_from  = S,
+    values_from = itpc
+  ) %>%
+  # compute differences
+  mutate(
+    diff_itpc = stim - prestim,                      # absolute difference
+  )
+
+# If you want to drop rows missing either condition:
+itpc_wide <- itpc_wide %>% tidyr::drop_na(prestim, stim)
+
+itpc_wide %>% glimpse()
+
+p_halfeye <- ggplot(itpc, aes(y = S, x = itpc, fill = S)) +
+  stat_halfeye(point_interval = median_qi,
+               .width = c(0.50, 0.80, 0.95),
+               adjust = 0.7, slab_alpha = 0.6) +
+  scale_x_continuous(limits = c(0, 1)) +
+  labs(title = "Half-eye: distribution and quantile intervals", x = "ITPC", y = NULL) +
+  theme(legend.position = "none")
+p_halfeye 
+```
+```{r}
+# packages
+library(dplyr)
+library(tidyr)
+library(readr)
+library(here)
+library(ggplot2)
+library(ggdist)
+library(patchwork)
+
+# --- load & tidy ---
+itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) %>%
+  dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) %>%
+  mutate(
+    S = case_when(
+      type == "prestim_itpc" ~ "prestim",
+      type == "stim_itpc"    ~ "stim",
+      TRUE ~ type
+    ),
+    itpc = value
+  ) %>%
+  select(subject, roi, P, T, S, itpc) %>%
+  distinct()
+
+# (optional but safe) average duplicate rows first
+itpc_avg <- itpc %>%
+  group_by(subject, roi, S) %>%
+  summarise(itpc = mean(itpc, na.rm = TRUE), .groups = "drop")
+
+# wide format + within-subject difference
+itpc_wide <- itpc_avg %>%
+  mutate(S = factor(S, levels = c("prestim", "stim"))) %>%
+  pivot_wider(names_from = S, values_from = itpc) %>%
+  drop_na(prestim, stim) %>%
+  mutate(diff_itpc = stim - prestim)
+
+# --- plots ---
+# 1) Half-eye for ITPC by condition (no title)
+p_cond <- ggplot(itpc_avg, aes(x = itpc, y = S, fill = S)) +
+  stat_halfeye(point_interval = median_qi,
+               .width = c(0.50, 0.80, 0.95),
+               adjust = 0.7, slab_alpha = 0.6) +
+  scale_x_continuous(limits = c(0, 1)) +
+  labs(x = "ITPC", y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none",
+        plot.title = element_blank())
+
+# 2) Half-eye for paired differences (stim − prestim), with 0 line (no title)
+p_diff <- ggplot(itpc_wide, aes(x = diff_itpc, y = "stim − prestim")) +
+  stat_halfeye(point_interval = median_qi,
+               .width = c(0.50, 0.80, 0.95),
+               adjust = 0.7, slab_alpha = 0.6, fill = "grey60") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  labs(x = "Δ ITPC (stim − prestim)", y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_blank())
+
+# combine vertically; no titles/captions
+p_combined <- p_cond / p_diff +
+  plot_layout(heights = c(2, 1))
+
+p_combined
+```
+```{r}
+library(scales)  # for nice breaks
+
+# --- shared x from data ---
+vals_cond <- itpc_avg$itpc
+vals_diff <- itpc_wide$diff_itpc
+
+rng          <- range(c(vals_cond, vals_diff), na.rm = TRUE)
+pad          <- diff(rng) * 0.04
+xlim_shared  <- c(rng[1] - pad, rng[2] + pad)
+breaks_shared <- breaks_extended(n = 7)(c(vals_cond, vals_diff))
+
+# ITPC by condition
+p_cond <- ggplot(itpc_avg, aes(x = itpc, y = S, fill = S)) +
+  stat_halfeye(point_interval = median_qi,
+               .width = c(0.50, 0.80, 0.95),
+               adjust = 0.7, slab_alpha = 0.6) +
+  scale_x_continuous(limits = xlim_shared,
+                     breaks = breaks_shared,
+                     expand = expansion(mult = c(0, 0.02))) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none",
+        plot.title = element_blank(),
+        axis.text.x  = element_blank(),
+        axis.ticks.x = element_blank())
+
+# Paired differences (stim − prestim)
+p_diff <- ggplot(itpc_wide, aes(x = diff_itpc, y = "stim − prestim")) +
+  stat_halfeye(point_interval = median_qi,
+               .width = c(0.50, 0.80, 0.95),
+               adjust = 0.7, slab_alpha = 0.6, fill = "grey60") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_x_continuous(limits = xlim_shared,
+                     breaks = breaks_shared,
+                     expand = expansion(mult = c(0, 0.02))) +
+  labs(x = "Shared x-axis (from data)", y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_blank())
+
+p_combined <- p_cond / p_diff + patchwork::plot_layout(heights = c(2, 1))
+p_combined
+```
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of ITPC values and their differences between PRESTIM and STIM soud stimulation condition"
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+# (your plotting code that ends with: p_combined)
+p_combined
+```
+
+
+
+I have decided to average condition to get 1 observation per subject, below I am preparing data to be used in the RBA
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+# assumes you already have: itpc_avg with columns: subject, roi, S, itpc
+
+itpc_rba_long <- itpc_avg %>%
+  mutate(
+    Cond = factor(S, levels = c("prestim","stim"))
+  ) %>%
+  transmute(
+    Subj = subject,
+    ROI  = roi,
+    Cond,
+    Y    = itpc
+  ) %>%
+  arrange(Subj, ROI, Cond) %>%
+  tidyr::drop_na(Y)
+
+write.table(
+  itpc_rba_long,
+  file = "itpc_rba_long.tsv",
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE, na = "NA"
+)
+```
+
+
+
+```{r}
+# assumes you already have: itpc_wide with columns: subject, roi, prestim, stim
+itpc_rba_diff <- itpc_wide %>%
+  transmute(
+    Subj = subject,
+    ROI  = roi,
+    Y    = stim - prestim
+  ) %>%
+  tidyr::drop_na(Y)
+
+write.table(
+  itpc_rba_diff,
+  file = "itpc_rba_diff.tsv",
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE, na = "NA"
+)
+```
+
+
+```{r}
+library(dplyr)
+library(gt)
+
+# 1) Average within subject × roi (collapse over T)
+per_subject_roi <- itpc_wide %>%
+  group_by(subject, roi) %>%
+  summarise(diff_itpc_mean_T = mean(diff_itpc, na.rm = TRUE), .groups = "drop")
+```
+
+
+```{r}
+read.delim("itpc_rba_long.tsv") %>% dplyr::glimpse()
+read.delim("itpc_rba_diff.tsv") %>% dplyr::glimpse()
+```
+```{r}
+# 0) sanity checks
+stopifnot(file.exists("itpc_rba_diff.tsv"))     # Subj ROI Y
+system("RBA -help | head -n 5")                 # confirm it's on PATH
+
+# 1) run RBA (blocking; prints to the notebook)
+cmd <- paste(
+  "RBA",
+  "-prefix itpc_diff_rba",
+  "-chains 4",
+  "-iterations 2000",
+  "-model 1",
+  "-EOI 'Intercept'",
+  " -ridgePlot 10 8 ",
+  "-distY 'student'",          # robust if your Y has outliers
+  "-dataTable itpc_rba_diff.tsv"
+)
+status <- system(cmd)
+
+# 2) read results back into R
+res <- read.delim("itpc_diff_rba.txt", comment.char = "#")
+head(res)
+```
+```{r}
+# check current PATH and whether RBA is visible
+Sys.getenv("PATH")
+Sys.which("RBA")
+
+# common install locations — add what applies on your machine
+cand <- c(file.path(Sys.getenv("HOME"), "abin"),
+          "/usr/local/bin",
+          "/opt/homebrew/bin",              # Apple Silicon Homebrew
+          "/usr/local/afni/bin",            # generic
+          Sys.getenv("CONDA_PREFIX"))       # if installed via conda
+
+cand <- cand[file.exists(cand)]
+Sys.setenv(PATH = paste(c(cand, Sys.getenv("PATH")), collapse=.Platform$path.sep))
+Sys.which("RBA")   # should now show a path
+
+# run
+```
+
+
+
+# Not needed part
+
+
+```{r}
+
+
+# 2) Summarise across subjects for each roi
+summary_roi <- per_subject_roi %>%
+  group_by(roi) %>%
+  summarise(
+    n         = n(),
+    mean_diff = mean(diff_itpc_mean_T, na.rm = TRUE),
+    sd        = sd(diff_itpc_mean_T, na.rm = TRUE),
+    se        = sd / sqrt(n),
+    ci_low    = mean_diff + qt(0.025, df = n - 1) * se,
+    ci_high   = mean_diff + qt(0.975, df = n - 1) * se,
+    .groups   = "drop"
+  ) %>%
+  mutate(ci_95 = sprintf("[%.3f, %.3f]", ci_low, ci_high)) %>%
+  arrange(desc(mean_diff))
+
+# 3) GT table
+summary_roi %>%
+  select(roi, mean_diff, se, ci_95, n) %>%
+  gt(rowname_col = "roi") %>%
+  tab_header(
+    title = md("**diff_itpc averaged across subjects, by ROI**"),
+    subtitle = "Mean(stim − prestim) with SE and 95% CI; per-subject average over T first"
+  ) %>%
+  cols_label(
+    mean_diff = "Mean diff_itpc",
+    se        = "SE",
+    ci_95     = "95% CI",
+    n         = "N (subjects)"
+  ) %>%
+  fmt_number(columns = c(mean_diff, se), decimals = 3) %>%
+  tab_style(
+    style = list(cell_text(weight = "bold")),
+    locations = cells_column_labels(everything())
+  ) %>%
+  cols_width(everything() ~ px(220))
+```
+
+# just comparing the conditions
+
+```{r}
+library(brms)
+rstan::rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+# Example for S == "prestim"
+itpc_prestim <- itpc %>%
+  dplyr::filter(S == "prestim")
+
+# brms model
+fit_prestim <- brm(
+  itpc ~ T * P + (1|subject) + (1 + T*P|roi), 
+  data = itpc_prestim,
+  family = Beta(),  # ITPC is [0,1]; use Beta regression
+  chains = 4, cores = 4, iter = 10000
+)
+```
+```{r}
+ranef(fit_prestim)$roi  # ROI-specific deviations from global effect
+library(emmeans)
+emmeans(fit_prestim, ~ T*P, type = "response")
+```
+  
+```{r}
+# main effects and interactions
+contrast(emmeans(fit_prestim, ~ T*P), method = "pairwise")
+
+# or specify hypotheses
+hypothesis(fit_prestim, "Treal:Ppost - Tsham:Ppost > 0")
+```
+
 
 </document_content>
 </document>

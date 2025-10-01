@@ -1,0 +1,172 @@
+---
+title: "EDA_rba"
+format: html
+---
+
+```{r}
+#| label: fig-itpc
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of ITPC values and their differences between PRESTIM and STIM soud stimulation condition"
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+# packages
+library(dplyr)
+library(tidyr)
+library(readr)
+library(here)
+library(ggplot2)
+library(ggdist)
+library(patchwork)
+library(scales)  # for nice breaks
+
+# --- load & tidy ---
+itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) %>%
+  dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) %>%
+  mutate(
+    S = case_when(
+      type == "prestim_itpc" ~ "prestim",
+      type == "stim_itpc"    ~ "stim",
+      TRUE ~ type
+    ),
+    itpc = value
+  ) %>%
+  select(subject, roi, P, T, S, itpc) %>%
+  distinct()
+
+# (optional but safe) average duplicate rows first
+itpc_avg <- itpc %>%
+  group_by(subject, roi, S) %>%
+  summarise(itpc = mean(itpc, na.rm = TRUE), .groups = "drop")
+
+# wide format + within-subject difference
+itpc_wide <- itpc_avg %>%
+  mutate(S = factor(S, levels = c("prestim", "stim"))) %>%
+  pivot_wider(names_from = S, values_from = itpc) %>%
+  drop_na(prestim, stim) %>%
+  mutate(diff_itpc = stim - prestim)
+
+
+# --- shared x from data ---
+vals_cond <- itpc_avg$itpc
+vals_diff <- itpc_wide$diff_itpc
+
+rng          <- range(c(vals_cond, vals_diff), na.rm = TRUE)
+pad          <- diff(rng) * 0.04
+xlim_shared  <- c(rng[1] - pad, rng[2] + pad)
+breaks_shared <- breaks_extended(n = 7)(c(vals_cond, vals_diff))
+
+# ITPC by condition
+p_cond <- ggplot(itpc_avg, aes(x = itpc, y = S, fill = S)) +
+  stat_halfeye(point_interval = median_qi,
+               .width = c(0.50, 0.80, 0.95),
+               adjust = 0.7, slab_alpha = 0.6) +
+  scale_x_continuous(limits = xlim_shared,
+                     breaks = breaks_shared,
+                     expand = expansion(mult = c(0, 0.02))) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none",
+        plot.title = element_blank(),
+        axis.text.x  = element_blank(),
+        axis.ticks.x = element_blank())
+
+# Paired differences (stim − prestim)
+p_diff <- ggplot(itpc_wide, aes(x = diff_itpc, y = "stim − prestim")) +
+  stat_halfeye(point_interval = median_qi,
+               .width = c(0.50, 0.80, 0.95),
+               adjust = 0.7, slab_alpha = 0.6, fill = "grey60") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_x_continuous(limits = xlim_shared,
+                     breaks = breaks_shared,
+                     expand = expansion(mult = c(0, 0.02))) +
+  labs(x = "Shared x-axis (from data)", y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_blank())
+
+p_combined <- p_cond / p_diff + patchwork::plot_layout(heights = c(2, 1))
+p_combined
+```
+
+```{r}
+source(here::here("R/utils.R"))
+
+e <- new.env()
+load(here::here("notebooks/itpc_diff_rba.RData"), envir = e)
+
+ls(e)          # see what's inside
+spectral_offset_sigma <- e$fm     # pull just the object(s) you want
+# model <- e$model
+ #1. Extract S effects for each ROI
+# Note: In your model, S is a factor with levels "prestim" and "stim"
+# The parameter name will be "Sstim" (contrast against baseline)
+
+
+# Extract ONLY the Intercept effects (the only population-level effect in your model)
+intercept_effects <- extract_region_effects(
+  fit = fm,
+  region_var = "ROI",  # Use "ROI" (capital) - RBA default
+  parameter = "Intercept",
+  digits = 4
+)
+
+# Create results dataframe
+results_df <- data.frame(
+  roi = rownames(intercept_effects),
+  mean_effect = intercept_effects$mean,
+  sd = intercept_effects$SD,
+  p_plus = intercept_effects$`P+`,
+  lower95 = intercept_effects$`2.5%`,
+  upper95 = intercept_effects$`97.5%`
+) %>%
+  mutate(
+    significant = (lower95 > 0) | (upper95 < 0),
+    effect_direction = case_when(
+      mean_effect > 0 ~ "increase",
+      mean_effect < 0 ~ "decrease",
+      TRUE ~ "no_change"
+    )
+  )
+
+head(results_df)
+```
+
+# 3. Order by effect size and filter significant effects
+
+```{r}
+
+# Filter for significant ROIs
+significant_rois <- results_df %>%
+  dplyr::filter(p_plus > 0.975 | p_plus < 0.025) %>%  # Changed from s_effect_pplus
+  arrange(desc(abs(mean_effect)))  # Changed from s_effect
+
+print("Number of ROIs with significant effect:")
+print(nrow(significant_rois))
+
+print("\nTop 10 ROIs by absolute effect size:")
+print(head(significant_rois, 10))
+
+# 4. Create brain visualization
+# Filter for visualization (only significant effects)
+viz_df <- results_df %>%
+  rename(region = roi) %>%  # ggseg expects 'region' not 'label'
+  dplyr::filter(p_plus > 0.975 | p_plus < 0.025)
+
+# Create brain plot
+brain_plot_effect <- my_brain_plot(
+  viz_df,
+  desterieux,
+  mean_effect,  # Changed from s_effect
+  filltype = "RdBu",
+  legend = TRUE
+) +
+  ggtitle("ITPC Difference Effect (stim - prestim)\n(Significant ROIs Only)")
+
+print(brain_plot_effect)
+```
+
+`

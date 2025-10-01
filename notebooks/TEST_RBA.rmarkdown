@@ -366,3 +366,4 @@ contrast(emmeans(fit_prestim, ~ T*P), method = "pairwise")
 hypothesis(fit_prestim, "Treal:Ppost - Tsham:Ppost > 0")
 ```
 
+
