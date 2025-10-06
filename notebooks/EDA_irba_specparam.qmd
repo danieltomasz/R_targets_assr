@@ -75,14 +75,39 @@ offset_to_plot <- c("offset_prestim", "offset_stim", "offset_diff")
 head(specparam_diff)
 
 # Hue by ROI, free x-scales
-plot_metrics(specparam_diff, metrics = exponent_to_plot, group_axis = list(
-  conditions = c("exponent_prestim", "exponent_stim"),
-  difference = c("exponent_diff")
-), facet_ncol = 1)
-plot_metrics(specparam_diff, metrics = offset_to_plot, group_axis = list(
-  conditions = c("offset_prestim", "offset_stim"),
-  difference = c("offset_diff")
-), facet_ncol = 1)
+# Define metrics
+exponent_to_plot <- c("exponent_prestim", "exponent_stim", "exponent_diff")
+offset_to_plot <- c("offset_prestim", "offset_stim", "offset_diff")
+
+# Define custom labels
+exponent_labels <- c(
+  "exponent_prestim" = "Pre-stimulus\nAperiodic Exponent",
+  "exponent_stim" = "Stimulus\nAperiodic Exponent",
+  "exponent_diff" = "Change in\nAperiodic Exponent"
+)
+
+offset_labels <- c(
+  "offset_prestim" = "Pre-stimulus\nSpectral Offset",
+  "offset_stim" = "Stimulus\nSpectral Offset",
+  "offset_diff" = "Change in\nSpectral Offset"
+)
+
+# Example 1: Custom labels with different color palettes per group
+p1 <- plot_metrics(
+  specparam_diff,
+  metrics = exponent_to_plot,
+  group_axis = list(
+    conditions = c("exponent_prestim", "exponent_stim"),
+    difference = c("exponent_diff")
+  ),
+  metric_labels = exponent_labels,
+  color_palette = list(
+    conditions = c("#E76F51", "#2A9D8F"),  # Coral and teal for conditions
+    difference = c("#264653")               # Dark blue for difference
+  ),
+  facet_ncol = 1
+)
+p1
 ```
 
 

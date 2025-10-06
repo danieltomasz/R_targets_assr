@@ -13,16 +13,32 @@ plot_metrics <- function(
     facet_ncol = 1,
     widths = c(0.50, 0.80, 0.95),
     add_zero_line = TRUE,
-    base_size = 12
+    base_size = 12,
+    color_palette = NULL,      # NEW: single palette or list of palettes per group
+    metric_labels = NULL       # NEW: named vector for custom labels
 ) {
   
-  # Determine axis grouping - FIX: Check type first!
+  # Apply custom labels if provided
+  if (!is.null(metric_labels)) {
+    # Ensure all metrics have labels
+    missing_labels <- setdiff(metrics, names(metric_labels))
+    if (length(missing_labels) > 0) {
+      warning(paste("No labels provided for:", paste(missing_labels, collapse = ", ")))
+      # Use original names for missing labels
+      for (m in missing_labels) {
+        metric_labels[m] <- m
+      }
+    }
+  } else {
+    # Use original names
+    metric_labels <- setNames(metrics, metrics)
+  }
+  
+  # Determine axis grouping
   if (is.list(group_axis)) {
-    # User-provided grouping
     metric_groups <- group_axis
   } else if (is.character(group_axis) && length(group_axis) == 1) {
     if (group_axis == "auto") {
-      # Automatically separate diff metrics from others
       diff_metrics <- metrics[grepl("diff|change|delta", metrics, ignore.case = TRUE)]
       base_metrics <- setdiff(metrics, diff_metrics)
       
@@ -46,18 +62,37 @@ plot_metrics <- function(
     stop("group_axis must be a character string or a list")
   }
   
+  # Prepare color palettes
+  if (is.null(color_palette)) {
+    # Default palettes
+    palettes_list <- rep(list(NULL), length(metric_groups))
+  } else if (is.list(color_palette) && !is.null(names(color_palette))) {
+    # Named list of palettes per group
+    palettes_list <- lapply(names(metric_groups), function(g) {
+      color_palette[[g]]
+    })
+  } else if (!is.list(color_palette) || all(sapply(color_palette, is.character))) {
+    # Single palette for all groups
+    palettes_list <- rep(list(color_palette), length(metric_groups))
+  } else {
+    # Unnamed list of palettes
+    palettes_list <- color_palette
+  }
+  
   # Create a plot for each group
-  plot_list <- lapply(names(metric_groups), function(group_name) {
+  plot_list <- lapply(seq_along(metric_groups), function(i) {
+    group_name <- names(metric_groups)[i]
     group_metrics <- metric_groups[[group_name]]
+    group_palette <- palettes_list[[i]]
     
-    # Determine which columns to keep
+    # Determine columns to keep
     cols_to_keep <- if (!is.null(hue)) {
       c(group_metrics, hue)
     } else {
       group_metrics
     }
     
-    # Create long format for this group
+    # Create long format
     long <- data %>%
       select(any_of(cols_to_keep)) %>%
       pivot_longer(
@@ -67,10 +102,12 @@ plot_metrics <- function(
       ) %>%
       mutate(
         metric = factor(metric, levels = group_metrics),
+        metric_label = factor(metric_labels[as.character(metric)], 
+                              levels = metric_labels[group_metrics]),
         y_dummy = ""
       )
     
-    # Calculate x limits for this group
+    # Calculate x limits
     rng <- range(long$value, na.rm = TRUE)
     pad <- diff(rng) * 0.04
     xlim_group <- c(rng[1] - pad, rng[2] + pad)
@@ -86,7 +123,7 @@ plot_metrics <- function(
         slab_alpha = 0.6
       ) +
       facet_wrap(
-        ~ metric, 
+        ~ metric_label,  # Use labels instead of raw metric names
         ncol = facet_ncol,
         scales = "fixed",
         strip.position = "top"
@@ -107,14 +144,32 @@ plot_metrics <- function(
         panel.spacing.y = unit(0.5, "lines")
       )
     
-    # Add zero line if needed
+    # Apply custom color palette
+    if (!is.null(group_palette)) {
+      if (is.null(hue)) {
+        p <- p + 
+          scale_fill_manual(values = group_palette) +
+          scale_color_manual(values = group_palette)
+      } else {
+        # For hue coloring, apply palette to the hue variable
+        p <- p + 
+          scale_fill_manual(values = group_palette) +
+          scale_color_manual(values = group_palette)
+      }
+    }
+    
+    # Add zero line
     if (add_zero_line) {
       has_diff <- any(grepl("diff|change|delta", group_metrics, ignore.case = TRUE))
       if (has_diff) {
+        # Create vline data with labeled metrics
         vline_data <- data.frame(
           metric = factor(group_metrics, levels = group_metrics),
           y_dummy = ""
-        )
+        ) %>%
+          mutate(metric_label = factor(metric_labels[as.character(metric)],
+                                       levels = metric_labels[group_metrics]))
+        
         p <- p + geom_vline(
           data = vline_data,
           aes(xintercept = 0),
@@ -131,8 +186,6 @@ plot_metrics <- function(
   if (length(plot_list) == 1) {
     return(plot_list[[1]])
   } else {
-    # Stack vertically with patchwork
-    combined <- wrap_plots(plot_list, ncol = 1)
-    return(combined)
+    return(wrap_plots(plot_list, ncol = 1))
   }
 }
