@@ -1,0 +1,555 @@
+---
+title: "EDA_rba_itpc"
+format: html
+editor: visual
+---
+
+
+
+# Pivot dataframe
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+
+specparam <- readr::read_csv(here::here("data/specparam_all.csv")) %>%
+  dplyr::mutate(S = condition) %>%
+  select(subject, roi, P, T, S, exponent, error, offset) %>%
+distinct() 
+print(specparam)
+
+# Method 1: Compute differences FIRST, then average
+specparam_diff <- specparam %>%
+  select(subject, roi, P, T, S, exponent, offset) %>%
+  # Aggregate within each subject×roi×P×T×S combination
+  group_by(subject, roi, P, T, S) %>%
+  summarise(
+    exponent = mean(exponent, na.rm = TRUE),
+    offset = mean(offset, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Pivot to wide format
+  pivot_wider(
+    names_from = S,
+    values_from = c(exponent, offset)
+  ) %>%
+  # Compute WITHIN-SUBJECT differences
+  mutate(
+    exponent_diff = exponent_stim - exponent_prestim,
+    offset_diff = offset_stim - offset_prestim
+  )
+
+# Now average the differences (not the conditions separately)
+specparam_avg <- specparam_diff %>%
+  group_by(subject, roi) %>%
+  summarise(
+    # Keep individual conditions for plotting
+    exponent_prestim = mean(exponent_prestim, na.rm = TRUE),
+    exponent_stim = mean(exponent_stim, na.rm = TRUE),
+    offset_prestim = mean(offset_prestim, na.rm = TRUE),
+    offset_stim = mean(offset_stim, na.rm = TRUE),
+    # Mean of differences (correct for paired data!)
+    exponent_diff = mean(exponent_diff, na.rm = TRUE),
+    offset_diff = mean(offset_diff, na.rm = TRUE),
+    n_pairs = n(),  # How many P×T combinations
+    .groups = "drop"
+  )
+
+# Verify the difference
+specparam_avg %>%
+  mutate(
+    # This should equal exponent_diff (it does!)
+    check = exponent_stim - exponent_prestim
+  ) %>%
+  select(subject, roi, exponent_diff, check) %>%
+  head()
+```
+
+
+```{r}
+# Test in R console first:
+library(here)
+source(here::here("R", "utils_viz.R"))
+metrics_to_plot <- c("exponent_prestim", "exponent_stim", "exponent_diff")
+#metrics <- metrics_to_plot
+head(specparam_diff)
+# Hue by T (works even though the column is named "T")
+plot_metrics(specparam_diff, metrics = metrics_to_plot, facet_ncol = 1)
+
+# No hue
+#plot_metrics(specparam_diff, metrics = metrics_to_plot)
+
+# Hue by ROI, free x-scales
+plot_metrics(specparam_diff, metrics = metrics_to_plot, hue = "roi", scales = "fixed", facet_ncol = 1)
+```
+
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggdist)
+library(patchwork)
+library(scales)
+library(rlang)
+
+# ------------------------------------------------------------
+# Plot two-condition distributions + their difference
+# Assumes 'data' already has the columns you want.
+# ------------------------------------------------------------
+plot_two_condition_dist_and_diff <- function(
+  data,
+  value,                     # string: numeric column name, e.g., "itpc"
+  condition,                 # string: condition column with EXACTLY two levels
+  levels,                    # character(2): order controls sign (level2 - level1)
+  ids,                       # character vector: columns defining a unit (e.g., "subject")
+  groups = character(0),     # character vector: columns to facet by (optional)
+  facet = TRUE,
+  facet_ncol = 3,
+  check_unique = TRUE        # stop if duplicates within ids×groups×condition
+) {
+  stopifnot(length(levels) == 2)
+
+  # Keep only what we need
+  keep_cols <- unique(c(ids, groups, condition, value))
+  df <- data %>%
+    select(all_of(keep_cols)) %>%
+    mutate(!!condition := factor(.data[[condition]], levels = levels))
+
+  # Optionally enforce uniqueness
+  if (isTRUE(check_unique)) {
+    n_dups <- df %>%
+      summarise(n = dplyr::n(), .by = c(all_of(c(ids, groups, condition)))) %>%
+      filter(n > 1L) %>%
+      nrow()
+    if (n_dups > 0) {
+      stop("Duplicates detected within ids×groups×condition. Fix upstream or set check_unique = FALSE.")
+    }
+  }
+
+  # Compute within-unit difference via wide pivot (level2 - level1)
+  wide <- df %>%
+    pivot_wider(names_from = all_of(condition), values_from = all_of(value)) %>%
+    drop_na(!!levels[1], !!levels[2]) %>%
+    mutate(diff_val = .data[[levels[2]]] - .data[[levels[1]]])
+
+  # Shared x-axis from both the raw values and the differences
+  vals_cond <- df[[value]]
+  vals_diff <- wide$diff_val
+  rng <- range(c(vals_cond, vals_diff), na.rm = TRUE)
+  pad <- diff(rng) * 0.04
+  xlim_shared <- c(rng[1] - pad, rng[2] + pad)
+  breaks_shared <- breaks_extended(n = 7)(c(vals_cond, vals_diff))
+
+  # Condition distributions
+  p_cond <- ggplot(df, aes(x = .data[[value]], y = .data[[condition]], fill = .data[[condition]])) +
+    stat_halfeye(point_interval = median_qi,
+                 .width = c(0.50, 0.80, 0.95),
+                 adjust = 0.7, slab_alpha = 0.6) +
+    scale_x_continuous(limits = xlim_shared,
+                       breaks = breaks_shared,
+                       expand = expansion(mult = c(0, 0.02))) +
+    labs(x = NULL, y = NULL) +
+    theme_minimal(base_size = 12) +
+    theme(legend.position = "none",
+          axis.text.x  = element_blank(),
+          axis.ticks.x = element_blank())
+
+  # Difference distribution
+  diff_lab <- paste(levels[2], "−", levels[1])
+  p_diff <- ggplot(wide, aes(x = diff_val, y = diff_lab)) +
+    stat_halfeye(point_interval = median_qi,
+                 .width = c(0.50, 0.80, 0.95),
+                 adjust = 0.7, slab_alpha = 0.6, fill = "grey60") +
+    geom_vline(xintercept = 0, linetype = "dashed") +
+    scale_x_continuous(limits = xlim_shared,
+                       breaks = breaks_shared,
+                       expand = expansion(mult = c(0, 0.02))) +
+    labs(x = value, y = NULL) +
+    theme_minimal(base_size = 12)
+
+  # Facets (if any)
+  if (facet && length(groups) > 0) {
+    facet_formula <- as.formula(paste("~", paste(groups, collapse = " + ")))
+    p_cond <- p_cond + facet_wrap(facet_formula, ncol = facet_ncol)
+    p_diff <- p_diff + facet_wrap(facet_formula, ncol = facet_ncol)
+  }
+
+  p_cond / p_diff + plot_layout(heights = c(2, 1))
+}
+```
+
+```{r}
+library(dplyr)
+
+# exponent (one row per subject×roi×P×T×S)
+specparam_exp <- specparam %>%
+  group_by(subject, roi, P, T, S) %>%
+  summarise(exponent = mean(exponent, na.rm = TRUE), .groups = "drop")
+
+# offset (one row per subject×roi×P×T×S)
+specparam_off <- specparam %>%
+  group_by(subject, roi, P, T, S) %>%
+  summarise(offset = mean(offset, na.rm = TRUE), .groups = "drop")
+
+p_exp <- plot_two_condition_dist_and_diff(
+  data      = specparam_exp,
+  value     = "exponent",
+  condition = "S",
+  levels    = c("prestim","stim"),  # diff = stim - prestim
+  ids       = c("subject"),
+  groups    = c("roi","P","T"),     # facet by ROI, P, T
+  facet     = TRUE,
+  check_unique = TRUE               # will error if you missed duplicate collapsing
+)
+p_exp
+```
+```{r}
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+#' Validate and prepare data for two-condition comparison
+#' 
+#' @param data Input dataframe
+#' @param value Name of numeric column to analyze
+#' @param condition Name of condition column (must have exactly 2 levels)
+#' @param levels Character vector of length 2 specifying condition order
+#' @param ids Character vector of ID columns
+#' @param groups Character vector of grouping columns
+#' @param check_unique Logical, whether to check for duplicates
+#' 
+#' @return Validated and prepared dataframe
+validate_and_prepare_data <- function(data, value, condition, levels, 
+                                       ids, groups, check_unique = TRUE) {
+  # Input validation
+  stopifnot(
+    "levels must be length 2" = length(levels) == 2,
+    "value must be in data" = value %in% names(data),
+    "condition must be in data" = condition %in% names(data)
+  )
+  
+  # Select and prepare columns
+  keep_cols <- unique(c(ids, groups, condition, value))
+  df <- data %>%
+    select(all_of(keep_cols)) %>%
+    mutate(!!condition := factor(.data[[condition]], levels = levels))
+  
+  # Check for duplicates if requested
+  if (isTRUE(check_unique)) {
+    n_dups <- df %>%
+      summarise(n = dplyr::n(), .by = c(all_of(c(ids, groups, condition)))) %>%
+      filter(n > 1L) %>%
+      nrow()
+    
+    if (n_dups > 0) {
+      stop(sprintf(
+        "Found %d duplicate combinations in ids×groups×condition. 
+        Aggregate data first or set check_unique = FALSE.", 
+        n_dups
+      ))
+    }
+  }
+  
+  return(df)
+}
+
+#' Compute within-unit differences between conditions
+#' 
+#' @param data Long-format dataframe
+#' @param value Name of value column
+#' @param condition Name of condition column
+#' @param levels Character vector of length 2 (diff = levels[2] - levels[1])
+#' @param ids Character vector of ID columns
+#' @param groups Character vector of grouping columns
+#' 
+#' @return Dataframe with difference values
+compute_condition_difference <- function(data, value, condition, levels, 
+                                         ids, groups) {
+  wide <- data %>%
+    pivot_wider(
+      names_from = all_of(condition), 
+      values_from = all_of(value)
+    ) %>%
+    drop_na(!!levels[1], !!levels[2]) %>%
+    mutate(diff_val = .data[[levels[2]]] - .data[[levels[1]]])
+  
+  return(wide)
+}
+
+#' Calculate shared axis limits and breaks for aligned plots
+#' 
+#' @param values_list List of numeric vectors to include in range
+#' @param padding_factor Proportion of range to add as padding (default 0.04)
+#' @param n_breaks Number of breaks for axis (default 7)
+#' 
+#' @return List with xlim and breaks
+calculate_shared_axis <- function(values_list, padding_factor = 0.04, 
+                                  n_breaks = 7) {
+  all_vals <- unlist(values_list)
+  rng <- range(all_vals, na.rm = TRUE)
+  pad <- diff(rng) * padding_factor
+  
+  list(
+    xlim = c(rng[1] - pad, rng[2] + pad),
+    breaks = breaks_extended(n = n_breaks)(all_vals)
+  )
+}
+
+#' Create half-eye distribution plot
+#' 
+#' @param data Dataframe to plot
+#' @param x Name of x variable
+#' @param y Name of y variable  
+#' @param fill Name of fill variable (optional)
+#' @param axis_config List with xlim and breaks
+#' @param show_x_axis Logical, whether to show x-axis elements
+#' @param add_vline Logical, whether to add vertical reference line at 0
+#' @param fill_color Color for fill (used if fill variable not specified)
+#' 
+#' @return ggplot object
+create_halfeye_plot <- function(data, x, y, fill = NULL, 
+                                axis_config, show_x_axis = TRUE,
+                                add_vline = FALSE, fill_color = NULL) {
+  # Base plot
+  p <- ggplot(data, aes(x = .data[[x]], y = .data[[y]]))
+  
+  # Add fill aesthetic if specified
+  if (!is.null(fill)) {
+    p <- p + aes(fill = .data[[fill]])
+  }
+  
+  # Add half-eye geometry
+  p <- p + 
+    stat_halfeye(
+      point_interval = median_qi,
+      .width = c(0.50, 0.80, 0.95),
+      adjust = 0.7, 
+      slab_alpha = 0.6,
+      fill = if(is.null(fill)) fill_color else waiver()
+    )
+  
+  # Add vertical line if requested
+  if (add_vline) {
+    p <- p + geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5)
+  }
+  
+  # Configure x-axis
+  p <- p + 
+    scale_x_continuous(
+      limits = axis_config$xlim,
+      breaks = axis_config$breaks,
+      expand = expansion(mult = c(0, 0.02))
+    )
+  
+  # Style x-axis display
+  if (!show_x_axis) {
+    p <- p + theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+    )
+  }
+  
+  # Apply theme
+  p <- p +
+    labs(x = if(show_x_axis) x else NULL, y = NULL) +
+    theme_minimal(base_size = 12) +
+    theme(legend.position = "none")
+  
+  return(p)
+}
+
+# ============================================================
+# MAIN PLOTTING FUNCTION
+# ============================================================
+
+#' Plot two-condition distributions and their difference
+#' 
+#' *Creates aligned raincloud plots comparing two conditions with a difference plot*
+#' 
+#' @param data Dataframe in long format
+#' @param value String: name of numeric column to plot
+#' @param condition String: name of condition column (must have exactly 2 levels)
+#' @param levels Character(2): condition levels, order determines difference direction
+#' @param ids Character vector: columns that uniquely identify observations
+#' @param groups Character vector: columns to facet by (optional)
+#' @param facet Logical: whether to create faceted plots
+#' @param facet_ncol Integer: number of columns for facets
+#' @param check_unique Logical: whether to check for duplicate observations
+#' @param height_ratio Numeric(2): relative heights of condition vs difference plots
+#' @param padding_factor Numeric: proportion of range to add as axis padding
+#' 
+#' @return Patchwork object with stacked plots
+#' 
+#' @examples
+#' # Basic usage
+#' plot_two_condition_dist_and_diff(
+#'   data = my_data,
+#'   value = "response_time",
+#'   condition = "task",
+#'   levels = c("easy", "hard"),
+#'   ids = "subject"
+#' )
+#' 
+#' # With faceting
+#' plot_two_condition_dist_and_diff(
+#'   data = my_data,
+#'   value = "amplitude",
+#'   condition = "stimulation",
+#'   levels = c("sham", "active"),
+#'   ids = c("subject", "trial"),
+#'   groups = c("roi", "frequency_band"),
+#'   facet = TRUE
+#' )
+plot_two_condition_dist_and_diff <- function(
+  data,
+  value,
+  condition,
+  levels,
+  ids,
+  groups = character(0),
+  facet = TRUE,
+  facet_ncol = 3,
+  check_unique = TRUE,
+  height_ratio = c(2, 1),
+  padding_factor = 0.04
+) {
+  
+  # Step 1: Validate and prepare data
+  df <- validate_and_prepare_data(
+    data, value, condition, levels, ids, groups, check_unique
+  )
+  
+  # Step 2: Compute differences
+  wide <- compute_condition_difference(
+    df, value, condition, levels, ids, groups
+  )
+  
+  # Step 3: Calculate shared axis configuration
+  axis_config <- calculate_shared_axis(
+    values_list = list(df[[value]], wide$diff_val),
+    padding_factor = padding_factor
+  )
+  
+  # Step 4: Create condition distributions plot
+  p_cond <- create_halfeye_plot(
+    data = df,
+    x = value,
+    y = condition,
+    fill = condition,
+    axis_config = axis_config,
+    show_x_axis = FALSE,
+    add_vline = FALSE
+  )
+  
+  # Step 5: Create difference distribution plot
+  diff_label <- paste(levels[2], "−", levels[1])
+  p_diff <- create_halfeye_plot(
+    data = wide,
+    x = "diff_val",
+    y = diff_label,
+    fill = NULL,
+    axis_config = axis_config,
+    show_x_axis = TRUE,
+    add_vline = TRUE,
+    fill_color = "grey60"
+  ) + labs(x = value)
+  
+  # Step 6: Add faceting if requested
+  if (facet && length(groups) > 0) {
+    facet_formula <- as.formula(paste("~", paste(groups, collapse = " + ")))
+    p_cond <- p_cond + facet_wrap(facet_formula, ncol = facet_ncol)
+    p_diff <- p_diff + facet_wrap(facet_formula, ncol = facet_ncol)
+  }
+  
+  # Step 7: Combine plots
+  combined <- p_cond / p_diff + plot_layout(heights = height_ratio)
+  
+  return(combined)
+}
+
+# ============================================================
+# CONVENIENCE WRAPPER FOR SPECPARAM DATA
+# ============================================================
+
+#' Plot spectral parameter comparison across conditions
+#' 
+#' *Specialized wrapper for comparing spectral parameters (exponent, offset)*
+#' 
+#' @param data Specparam dataframe
+#' @param parameter String: "exponent" or "offset"
+#' @param prestim_label String: label for pre-stimulus condition
+#' @param stim_label String: label for stimulus condition
+#' @param group_vars Character vector: variables to group/facet by
+#' @param ... Additional arguments passed to plot_two_condition_dist_and_diff
+#' 
+#' @return Patchwork plot object
+plot_specparam_comparison <- function(
+  data,
+  parameter = c("exponent", "offset"),
+  prestim_label = "prestim",
+  stim_label = "stim",
+  group_vars = c("roi", "P", "T"),
+  ...
+) {
+  
+  parameter <- match.arg(parameter)
+  
+  # Prepare data: average within subject × group_vars × condition
+  data_agg <- data %>%
+    group_by(subject, S, !!!syms(group_vars)) %>%
+    summarise(
+      value = mean(.data[[parameter]], na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  # Create plot
+  plot_two_condition_dist_and_diff(
+    data = data_agg,
+    value = "value",
+    condition = "S",
+    levels = c(prestim_label, stim_label),
+    ids = "subject",
+    groups = group_vars,
+    ...
+  )
+}
+```
+
+
+```{r}
+# Example 1: Basic exponent comparison
+p_exp <- plot_specparam_comparison(
+  data = specparam,
+  parameter = "exponent",
+  group_vars = c("roi", "P", "T"),
+  facet = TRUE,
+  facet_ncol = 3
+)
+p_exp
+
+# Example 2: Offset comparison with custom styling
+p_off <- plot_specparam_comparison(
+  data = specparam,
+  parameter = "offset",
+  group_vars = c("roi"),
+  height_ratio = c(3, 1),  # Make condition plot taller
+  padding_factor = 0.06    # More padding
+)
+p_off
+
+# Example 3: Direct use of main function with custom data
+p_custom <- plot_two_condition_dist_and_diff(
+  data = my_eeg_data,
+  value = "amplitude",
+  condition = "stimulation_type",
+  levels = c("sham", "real"),
+  ids = c("subject", "trial"),
+  groups = c("electrode", "frequency_band"),
+  facet = TRUE,
+  check_unique = FALSE  # If you have already aggregated
+)
+```
+

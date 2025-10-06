@@ -19,16 +19,16 @@ write_df_csv <- function(df, path) {
   path  # return the file path so targets can track it
 }
 
-my_brain_plot <- function(df, atlas_df, parameter, filltype = "Blues", legend = FALSE) {
+my_brain_plot <- function(df, atlas_df, parameter, filltype = "Blues", legend = FALSE, limits = NULL) {
   # Define the expressions for each color palette
-  Blues_expr <- 'scale_fill_distiller(palette = "Blues", direction = 1)'
-  BuGn_expr <- 'scale_fill_distiller(palette = "BuGn", direction = 1)'
-  Purples_expr <- 'scale_fill_distiller(palette = "Purples", direction = 1)'
-  Vik_expr <- 'scale_fill_scico(palette = "vik",midpoint = 0)'
+  Blues_expr <- 'scale_fill_distiller(palette = "Blues", direction = 1, limits = limits)'
+  BuGn_expr <- 'scale_fill_distiller(palette = "BuGn", direction = 1, limits = limits)'
+  Purples_expr <- 'scale_fill_distiller(palette = "Purples", direction = 1, limits = limits)'
+  Vik_expr <- 'scale_fill_scico(palette = "vik",midpoint = 0, limits = limits)'
   # -1 reverses direction scales 
-  RdBu_expr <- 'scale_fill_distiller(palette = "RdBu", direction = -1)' 
-  RdYlBu_expr <- 'scale_fill_distiller(palette = "RdYlBu", direction = -1)'
-  Spectral_expr <- 'scale_fill_distiller(palette = "Spectral", direction = 1)'
+  RdBu_expr <- 'scale_fill_distiller(palette = "RdBu", direction = -1, limits = limits)' 
+  RdYlBu_expr <- 'scale_fill_distiller(palette = "RdYlBu", direction = -1, limits = limits)'
+  Spectral_expr <- 'scale_fill_distiller(palette = "Spectral", direction = 1, limits = limits)'
 
 
 
@@ -73,6 +73,9 @@ my_brain_plot <- function(df, atlas_df, parameter, filltype = "Blues", legend = 
     theme_void() +
     eval(rlang::parse_expr(color_palette)) +
     theme(legend.position = "bottom")
+  
+
+  return(p)
 }
 
 

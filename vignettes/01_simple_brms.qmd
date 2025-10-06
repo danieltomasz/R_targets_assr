@@ -102,6 +102,7 @@ The distribution is presented in the @fig-itpc.
 #| fig-height: 8        # adjust to keep aspect you like
 #| fig-dpi: 200         # crisper lines when wider
 #| fig-align: center
+#| results: "hide" 
 # packages
 library(dplyr)
 library(tidyr)
@@ -180,7 +181,92 @@ p_combined <- p_cond / p_diff + patchwork::plot_layout(heights = c(2, 1))
 p_combined
 ```
 
-For both PRESTIM and STIM condition I want to check differences in  other conditions, in order to see if I can collapse conditions, but model  `itpc ~ 1 + P*T + (P*T|roi) + (1|subject)` is too complex and have a convergence issues. Instead I am using RBA ans pairs of simpler models 
+### ITPC
+
+For both PRESTIM and STIM condition I want to check differences in  other conditions, in order to see if I can collapse conditions, but model  `itpc ~ 1 + P*T + (P*T|roi) + (1|subject)` is too complex and have a convergence issues. Instead I am using RBA ans pairs of simpler models.
+
+When combined all condition together to obtain @fig-brain-itpc.
+
+```{r}
+#| label: fig-brain-itpc
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of the evoked changed in ITPC by sound stimulation (STIM vs PRESTIM)"
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+#| results: 'hide'
+source(here::here("R/utils.R"))
+
+e <- new.env()
+load(here::here("notebooks/itpc_diff_rba.RData"), envir = e)
+
+ls(e)          # see what's inside
+spectral_offset_sigma <- e$fm     # pull just the object(s) you want
+# model <- e$model
+ #1. Extract S effects for each ROI
+# Note: In your model, S is a factor with levels "prestim" and "stim"
+# The parameter name will be "Sstim" (contrast against baseline)
+
+
+# Extract ONLY the Intercept effects (the only population-level effect in your model)
+intercept_effects <- extract_region_effects(
+  fit = spectral_offset_sigma,
+  region_var = "ROI",  # Use "ROI" (capital) - RBA default
+  parameter = "Intercept",
+  digits = 4
+)
+
+# Create results dataframe
+results_df <- data.frame(
+  roi = rownames(intercept_effects),
+  mean_effect = intercept_effects$mean,
+  sd = intercept_effects$SD,
+  p_plus = intercept_effects$`P+`,
+  lower95 = intercept_effects$`2.5%`,
+  upper95 = intercept_effects$`97.5%`
+) %>%
+  mutate(
+    significant = (lower95 > 0) | (upper95 < 0),
+    effect_direction = case_when(
+      mean_effect > 0 ~ "increase",
+      mean_effect < 0 ~ "decrease",
+      TRUE ~ "no_change"
+    )
+  )
+# Filter for  ROIs having a strong evidence of offect
+significant_rois <- results_df %>%
+  dplyr::filter(p_plus > 0.975 | p_plus < 0.025) %>%  # Changed from s_effect_pplus
+  arrange(desc(abs(mean_effect)))  # Changed from s_effect
+
+print("Number of ROIs with significant effect:")
+print(nrow(significant_rois))
+
+print("\nTop 10 ROIs by absolute effect size:")
+print(head(significant_rois, 10))
+
+# Don't strip the hemisphere prefix - keep the original ROI names!
+viz_df <- results_df %>%
+  rename(label = roi) %>%  # atlas expects 'label', not 'region'
+  select(label, mean_effect, p_plus, sd, lower95, upper95, significant)
+
+# Now the plot should work
+p_mean_all <- my_brain_plot(
+  df = viz_df,
+  atlas_df = desterieux,
+  parameter = mean_effect,
+  filltype = "RdBu",
+  legend = TRUE,
+  limits = c(-0.4, 0.4)
+) +
+  ggtitle("ITPC Difference Effect (stim - prestim)\n(All ROIs)")
+
+p_mean_all
+```
+
 
 Before we were collapsed data we wanted to check the differences using RBA 
 
@@ -189,7 +275,7 @@ Now I want to run model via targets
 Now I want to  extract the ITPC data and visualise it across the scalp 
 
 
-
+### Exponent
 
 `
 
