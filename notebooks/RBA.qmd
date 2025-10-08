@@ -1,0 +1,233 @@
+---
+title: "RBA"
+format: html
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(glue)
+library(here)
+library(conflicted)
+
+source(here::here("R/utils.R"))
+source(here::here("R/utils_viz.R"))
+
+# Helper function for computing differences
+compute_differences <- function(data, metrics) {
+  # First, aggregate
+  agg_data <- data %>%
+    group_by(subject, roi, P, T, S) %>%
+    summarise(across(all_of(metrics), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
+
+  # Pivot wider - this creates columns like metric_prestim, metric_stim
+  wide_data <- agg_data %>%
+    pivot_wider(
+      names_from = S,
+      values_from = all_of(metrics),
+      names_glue = "{.value}_{S}" # Explicit naming
+    )
+
+  # Debug: print column names to see what we actually have
+  cat("Columns after pivot_wider:", paste(names(wide_data), collapse = ", "), "\n")
+
+  # Compute differences for each metric
+  for (metric in metrics) {
+    stim_col <- paste0(metric, "_stim")
+    prestim_col <- paste0(metric, "_prestim")
+    diff_col <- paste0(metric, "_diff")
+
+    # Check if columns exist
+    if (stim_col %in% names(wide_data) && prestim_col %in% names(wide_data)) {
+      wide_data[[diff_col]] <- wide_data[[stim_col]] - wide_data[[prestim_col]]
+    } else {
+      warning(glue("Missing columns for {metric}: looking for {stim_col} and {prestim_col}"))
+      cat("Available columns:", paste(names(wide_data), collapse = ", "), "\n")
+    }
+  }
+
+  wide_data
+}
+```
+
+```{r}
+# ============================================================================
+# COMPUTE DIFFERENCES (WITHIN-SUBJECT)
+# ============================================================================
+
+# Load ITPC data
+itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) %>%
+  dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) %>%
+  mutate(
+    S = case_when(
+      type == "prestim_itpc" ~ "prestim",
+      type == "stim_itpc" ~ "stim",
+      TRUE ~ type
+    ),
+    itpc = value
+  ) %>%
+  select(subject, roi, P, T, S, itpc) %>%
+  distinct()
+
+
+itpc_diff <- compute_differences(itpc, "itpc")
+# ============================================================================
+# VISUALIZATION
+# ============================================================================
+
+
+p_itpc <- plot_condition_comparison(
+  data = itpc_diff,
+  metric = "itpc",
+  metric_label = "ITPC"
+)
+p_itpc
+
+
+# ============================================================================
+# COMPUTE DIFFERENCES (WITHIN-SUBJECT)
+# ============================================================================
+
+# Load specparam data
+specparam <- readr::read_csv(here::here("data/specparam_all.csv")) %>%
+  mutate(S = condition) %>%
+  select(subject, roi, P, T, S, exponent, error, offset) %>%
+  distinct()
+
+specparam_diff <- compute_differences(specparam, c("exponent", "offset"))
+
+# ============================================================================
+# VISUALIZATION
+# ============================================================================
+
+
+p_exponent <- plot_condition_comparison(
+  data = specparam_diff,
+  metric = "exponent",
+  metric_label = "Aperiodic Exponent"
+)
+p_exponent
+p_offset <- plot_condition_comparison(
+  data = specparam_diff,
+  metric = "offset",
+  metric_label = "Spectral Offset"
+)
+p_offset
+```
+
+```{r}
+itpc_config <- list(
+  name = "itpc",
+  data = itpc_diff,
+  metric = "itpc_diff",
+  dist_y = "student",
+  plot_title = "ITPC Difference Effect (stim - prestim)",
+  filltype = "RdBu",
+  limits = c(-0.35, 0.35),
+  significance_threshold = 0.975
+)
+
+run_rba <- function(cfg, atlas_df = desterieux) {
+   results <- with(cfg, {
+    rba_data <- prepare_rba_data(data, metric)
+    model_name <- glue("{name}_rba")
+    cat(glue("\n=== Running RBA for {name} ===\n"))
+    run_rba_model(data = rba_data, 
+                  model_name = model_name, 
+                  dist_y = dist_y)
+
+    # assume this returns a list that includes $brain_plot
+    extract_and_plot_rba(
+      model_name = model_name,
+      atlas_df = atlas_df,
+      plot_title = plot_title,
+      filltype = filltype,
+      limits = limits,
+      significance_threshold = significance_threshold
+    )
+
+    # return all you care about
+   # list(model_name = model_name, fit = fit, plots = plots)
+  })
+}
+
+itpc_rba <- run_rba(itpc_config )
+itpc_rba$brain_plot
+```
+
+
+
+
+
+
+```{r}
+# ============================================================================
+# RBA ANALYSIS - UNIFIED WORKFLOW
+# ============================================================================
+
+# Average across P×T combinations
+specparam_avg <- specparam_diff %>%
+  group_by(subject, roi) %>%
+  summarise(across(starts_with(c("exponent", "offset")), mean, na.rm = TRUE), .groups = "drop")
+
+# Define models to run
+models_config <- list(
+  exponent = list(
+    data = specparam_avg,
+    metric = "exponent",
+    dist_y = "normal",
+    plot_title = "Exponent Difference (stim - prestim)",
+    filltype = "Blues",
+    limits = NULL
+  ),
+  offset = list(
+    data = specparam_avg,
+    metric = "offset",
+    dist_y = "normal",
+    plot_title = "Offset Difference (stim - prestim)",
+    filltype = "BuGn",
+    limits = NULL
+  )
+)
+
+# Run all models
+results <- lapply(names(models_config), function(name) {
+  config <- models_config[[name]]
+  model_name <- glue("{metric}_rba")
+
+  # Prepare data
+  rba_data <- prepare_rba_data(config$data, config$metric)
+
+  # Run model
+  cat(glue("\n=== Running RBA for {metric} ===\n"))
+  run_rba_model(
+    data = rba_data,
+    model_name = model_name,
+    dist_y = config$dist_y
+  )
+
+  # Extract and visualize
+  extract_and_plot_rba(
+    model_name = model_name,
+    atlas_df = desterieux,
+    plot_title = config$plot_title,
+    filltype = config$filltype,
+    limits = config$limits
+  )
+})
+
+# Name the results list
+names(results) <- names(models_config)
+
+# ============================================================================
+# DISPLAY RESULTS
+# ============================================================================
+
+# Print summary for each model
+for (name in names(results)) {
+  cat(glue("\n=== {toupper(name)} Results ===\n"))
+  cat(glue("Significant ROIs: {nrow(results[[name]]$significant_rois)}\n\n"))
+  print(head(results[[name]]$significant_rois, 10))
+  print(results[[name]]$brain_plot)
+}
+```

@@ -62,6 +62,104 @@ p_itpc <- plot_condition_comparison(
 p_itpc
 
 ```
+# Running rba for itpc
+
+```{r}
+itpc_final<- itpc_diff  %>%
+  group_by(subject, roi) %>%
+  summarise(itpc_diff  = mean(itpc_diff, na.rm = TRUE), .groups = "drop") %>% 
+  transmute(
+    Subj = subject,
+    ROI  = roi,
+    Y    = itpc_diff 
+  ) %>%
+  arrange(Subj, ROI, Y) %>%
+  tidyr::drop_na(Y)
+
+model_name <- "itpc_rba"
+data_table_file <- glue("{model_name}.tsv")
+write.table(
+  itpc_final,
+  file = data_table_file,
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE, na = "NA"
+)
+read.delim(data_table_file) %>% dplyr::glimpse()
+
+
+
+
+# 0) sanity checks
+stopifnot(file.exists(data_table_file)) # Subj ROI Y
+system("RBA -help | head -n 5") # confirm it's on PATH
+
+
+# 1) run RBA (blocking; prints to the notebook)
+cmd <- paste(
+  "RBA",
+  glue("-prefix models/{model_name}"),
+  "-chains 4",
+  "-iterations 5000",
+  "-model 1",
+  "-EOI 'Intercept'",
+  " -ridgePlot 10 8 ",
+  "-distY 'student'", # robust if your Y has outliers
+  "-dataTable ",
+  data_table_file
+)
+status <- system(cmd)
+fs::file_move("Intercept_ridge.png", glue("models/", model_name, "_", "intercept_ridge.png"))
+
+# 2) read results back into R
+# res <- read.delim("specparam_exponent_rba.txt", comment.char = "#")
+# head(res)
+
+e <- new.env()
+load(here::here(glue("notebooks/models/{model_name}.RData")), envir = e)
+
+ls(e) # see what's inside
+spectral_offset_sigma <- e$fm # pull just the object(s) you want
+model <- e$model
+
+
+# Extract ONLY the Intercept effects (the only population-level effect in your model)
+intercept_effects <- extract_region_effects(
+  fit = spectral_offset_sigma,
+  region_var = "ROI", # Use "ROI" (capital) - RBA default
+  parameter = "Intercept",
+  digits = 4
+)
+
+results_df <- intercept_effects %>% # Create results dataframe
+  data.frame(
+  label = rownames(intercept_effects),
+  mean_effect = intercept_effects$mean,
+  sd = intercept_effects$SD,
+  p_plus = intercept_effects$`P+`)
+
+# Filter for  ROIs having a strong evidence of offect
+significant_rois <- results_df %>%
+  dplyr::filter(p_plus > 0.975 | p_plus < 0.025) %>%  # Changed from s_effect_pplus
+  arrange(desc(abs(mean_effect)))  # Changed from s_effect
+
+print("Number of ROIs with significant effect:")
+print(nrow(significant_rois))
+
+print("\nTop 10 ROIs by absolute effect size:")
+print(head(significant_rois, 10))
+
+# Now the plot should work
+p_mean_all <- my_brain_plot(
+  df = significant_rois,
+  atlas_df = desterieux,
+  parameter = mean_effect,
+  filltype = "RdBu",
+  legend = TRUE,
+  limits = c(-0.4, 0.4)
+) +
+  ggtitle("ITPC Difference Effect (stim - prestim)\n(All ROIs)")
+
+p_mean_all
+```
 
 
 
@@ -141,7 +239,10 @@ cand <- cand[file.exists(cand)]
 Sys.setenv(PATH = paste(c(cand, Sys.getenv("PATH")), collapse = .Platform$path.sep))
 Sys.which("RBA") # should now show a path
 ```
-# Running RBA
+
+
+
+# Running RBA for specparam
 
 ```{r}
 # Now average the differences (not the conditions separately)
@@ -340,9 +441,7 @@ if (fs::file_exists(src)) {
 } else {
   warning(glue("Source missing: {src}. Nothing moved."))
 }
-# 2) read results back into R
-# res <- read.delim("specparam_exponent_rba.txt", comment.char = "#")
-# head(res)
+
 ```
 ```{r}
 e <- new.env()

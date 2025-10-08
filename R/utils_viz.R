@@ -4,6 +4,11 @@ library(ggplot2)
 library(ggdist)
 library(scales)
 library(patchwork)
+library(ggseg)
+library(ggsegDesterieux)
+library(RColorBrewer)
+library(scico)
+
 
 plot_metrics <- function(
     data,
@@ -240,4 +245,64 @@ plot_condition_comparison <- function(
     color_palette = color_palette,
     facet_ncol = facet_ncol
   )
+}
+
+
+my_brain_plot <- function(df, atlas_df, parameter, filltype = "Blues", legend = FALSE, limits = NULL) {
+  # Define the expressions for each color palette
+  Blues_expr <- 'scale_fill_distiller(palette = "Blues", direction = 1, limits = limits)'
+  BuGn_expr <- 'scale_fill_distiller(palette = "BuGn", direction = 1, limits = limits)'
+  Purples_expr <- 'scale_fill_distiller(palette = "Purples", direction = 1, limits = limits)'
+  Vik_expr <- 'scale_fill_scico(palette = "vik",midpoint = 0, limits = limits)'
+  # -1 reverses direction scales 
+  RdBu_expr <- 'scale_fill_distiller(palette = "RdBu", direction = -1, limits = limits)' 
+  RdYlBu_expr <- 'scale_fill_distiller(palette = "RdYlBu", direction = -1, limits = limits)'
+  Spectral_expr <- 'scale_fill_distiller(palette = "Spectral", direction = 1, limits = limits)'
+  
+  
+  
+  # Use switch to select the appropriate expression based on filtype
+  color_palette <- switch(filltype,
+                          "Blues" = Blues_expr,
+                          "BuGn" = BuGn_expr,
+                          "Purples" = Purples_expr,
+                          "Vik" = Vik_expr,
+                          "RdBu" = RdBu_expr,
+                          "RdYlBu" = RdYlBu_expr,
+                          "Spectral" = Spectral_expr,
+                          stop("Unknown filltype") # Default case if none of the above matches
+  )
+  # Go further with analysis
+  parameter <- enquo(parameter)
+  df_combined <- atlas_df %>%
+    as_tibble() %>%
+    left_join(df) %>%
+    as_brain_atlas()
+  
+  p <- ggplot() +
+    ggseg::geom_brain(
+      atlas = df_combined,
+      mapping = aes(fill = !!parameter),
+      position = position_brain(side ~ hemi),
+      show.legend = legend
+    ) +
+    theme(
+      panel.background = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.ticks = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      plot.background = element_rect(fill = "transparent", colour = NA),
+      plot.margin = unit(c(-1, -1.2, -1.2, -1.5), "cm"), # Edited code
+      legend.position = "none"
+    ) + # Left margin
+    theme_void() +
+    eval(rlang::parse_expr(color_palette)) +
+    theme(legend.position = "bottom")
+  
+  
+  return(p)
 }

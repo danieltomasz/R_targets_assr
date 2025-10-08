@@ -1,12 +1,166 @@
-library(ggseg)
-library(ggplot2)
+
 library(tibble)
 library(readr)
 library(dplyr)
-library(scico)
-library(ggsegDesterieux)
-library(RColorBrewer)
 library(brms)
+
+
+#' Prepare data for RBA analysis by aggregating to subject×roi level
+#'
+#' @param data Data frame with subject, roi, and metric columns
+#' @param metric_col Character: name of metric column to analyze
+#' @param avg_function Function: how to aggregate (default: mean)
+#' @return Data frame with columns: Subj, ROI, Y
+prepare_rba_data <- function(data, metric_col, avg_function = mean) {
+  data %>%
+    group_by(subject, roi) %>%
+    summarise(
+      value = avg_function(.data[[metric_col]], na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    transmute(
+      Subj = subject,
+      ROI = roi,
+      Y = value
+    ) %>%
+    tidyr::drop_na(Y)
+}
+
+#' Run RBA model with standardized settings
+#'
+#' @param data Data frame with columns: Subj, ROI, Y
+#' @param model_name Character: prefix for output files
+#' @param dist_y Character: distribution type ("student" or "normal")
+#' @param output_dir Character: directory for model outputs (default: "models")
+#' @param iterations Integer: MCMC iterations
+#' @param chains Integer: number of chains
+#' @return Integer: system command exit status
+run_rba_model <- function(
+    data,
+    model_name,
+    dist_y = "student",
+    output_dir = "models",
+    iterations = 5000,
+    chains = 4
+) {
+  # Ensure output directory exists
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  
+  # Write data table
+  data_file <- glue::glue("data_table/{model_name}.tsv")
+  dir.create(dirname(data_file), recursive = TRUE, showWarnings = FALSE)
+  
+  write.table(
+    data,
+    file = data_file,
+    sep = "\t",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = TRUE,
+    na = "NA"
+  )
+  
+  # Construct and run RBA command
+  cmd <- paste(
+    "RBA",
+    glue::glue("-prefix {output_dir}/{model_name}"),
+    glue::glue("-chains {chains}"),
+    glue::glue("-iterations {iterations}"),
+    "-model 1",
+    "-EOI 'Intercept'",
+    "-ridgePlot 10 8",
+    glue::glue("-distY '{dist_y}'"),
+    "-dataTable",
+    data_file
+  )
+  
+  status <- system(cmd)
+  
+  # Move ridge plot if it exists
+  ridge_file <- "Intercept_ridge.png"
+  if (file.exists(ridge_file)) {
+    fs::file_move(
+      ridge_file,
+      glue::glue("{output_dir}/{model_name}_intercept_ridge.png")
+    )
+  }
+  
+  invisible(status)
+}
+
+#' Extract and visualize RBA results
+#'
+#' @param model_name Character: name of the RBA model
+#' @param output_dir Character: directory containing model outputs
+#' @param atlas_df Data frame: brain atlas for visualization
+#' @param plot_title Character: title for brain plot
+#' @param filltype Character: color palette for brain plot
+#' @param limits Numeric vector: color scale limits (optional)
+#' @param significance_threshold Numeric: P+ threshold for significance (default: 0.975)
+#' @return List with: results_df, significant_rois, brain_plot
+extract_and_plot_rba <- function(
+    model_name,
+    output_dir = "models",
+    atlas_df = NULL,
+    plot_title = NULL,
+    filltype = "RdBu",
+    limits = NULL,
+    significance_threshold = 0.975
+) {
+  # Load model results
+  e <- new.env()
+  load(glue::glue("{output_dir}/{model_name}.RData"), envir = e)
+  
+  # Extract intercept effects
+  intercept_effects <- extract_region_effects(
+    fit = e$fm,
+    region_var = "ROI",
+    parameter = "Intercept",
+    digits = 4
+  )
+  
+  # Create results dataframe
+  results_df <- data.frame(
+    label = rownames(intercept_effects),
+    mean_effect = intercept_effects$mean,
+    sd = intercept_effects$SD,
+    p_plus = intercept_effects$`P+`,
+    lower95 = intercept_effects$`2.5%`,
+    upper95 = intercept_effects$`97.5%`
+  )
+  
+  # Filter significant ROIs
+  significant_rois <- results_df %>%
+    dplyr::filter(
+      p_plus > significance_threshold | 
+        p_plus < (1 - significance_threshold)
+    ) %>%
+    arrange(desc(abs(mean_effect)))
+  
+  # Create brain plot if atlas provided
+  brain_plot <- NULL
+  if (!is.null(atlas_df)) {
+    brain_plot <- my_brain_plot(
+      df = significant_rois,
+      atlas_df = atlas_df,
+      parameter = mean_effect,
+      filltype = filltype,
+      legend = TRUE,
+      limits = limits
+    )
+    
+    if (!is.null(plot_title)) {
+      brain_plot <- brain_plot + ggtitle(plot_title)
+    }
+  }
+  
+  # Return results
+  list(
+    results_df = results_df,
+    significant_rois = significant_rois,
+    brain_plot = brain_plot
+  )
+}
 
 
 write_df_csv <- function(df, path) {
@@ -19,64 +173,7 @@ write_df_csv <- function(df, path) {
   path  # return the file path so targets can track it
 }
 
-my_brain_plot <- function(df, atlas_df, parameter, filltype = "Blues", legend = FALSE, limits = NULL) {
-  # Define the expressions for each color palette
-  Blues_expr <- 'scale_fill_distiller(palette = "Blues", direction = 1, limits = limits)'
-  BuGn_expr <- 'scale_fill_distiller(palette = "BuGn", direction = 1, limits = limits)'
-  Purples_expr <- 'scale_fill_distiller(palette = "Purples", direction = 1, limits = limits)'
-  Vik_expr <- 'scale_fill_scico(palette = "vik",midpoint = 0, limits = limits)'
-  # -1 reverses direction scales 
-  RdBu_expr <- 'scale_fill_distiller(palette = "RdBu", direction = -1, limits = limits)' 
-  RdYlBu_expr <- 'scale_fill_distiller(palette = "RdYlBu", direction = -1, limits = limits)'
-  Spectral_expr <- 'scale_fill_distiller(palette = "Spectral", direction = 1, limits = limits)'
 
-
-
-  # Use switch to select the appropriate expression based on filtype
-  color_palette <- switch(filltype,
-    "Blues" = Blues_expr,
-    "BuGn" = BuGn_expr,
-    "Purples" = Purples_expr,
-    "Vik" = Vik_expr,
-    "RdBu" = RdBu_expr,
-    "RdYlBu" = RdYlBu_expr,
-    "Spectral" = Spectral_expr,
-    stop("Unknown filltype") # Default case if none of the above matches
-  )
-  # Go further with analysis
-  parameter <- enquo(parameter)
-  df_combined <- atlas_df %>%
-    as_tibble() %>%
-    left_join(df) %>%
-    as_brain_atlas()
-
-  p <- ggplot() +
-    ggseg::geom_brain(
-      atlas = df_combined,
-      mapping = aes(fill = !!parameter),
-      position = position_brain(side ~ hemi),
-      show.legend = legend
-    ) +
-    theme(
-      panel.background = element_blank(),
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.ticks = element_blank(),
-      axis.text.x = element_blank(),
-      axis.text.y = element_blank(),
-      axis.title.x = element_blank(),
-      axis.title.y = element_blank(),
-      plot.background = element_rect(fill = "transparent", colour = NA),
-      plot.margin = unit(c(-1, -1.2, -1.2, -1.5), "cm"), # Edited code
-      legend.position = "none"
-    ) + # Left margin
-    theme_void() +
-    eval(rlang::parse_expr(color_palette)) +
-    theme(legend.position = "bottom")
-  
-
-  return(p)
-}
 
 
 extractorRData <- function(file, object = NULL) {
