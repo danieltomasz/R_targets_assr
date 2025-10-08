@@ -189,3 +189,55 @@ plot_metrics <- function(
     return(wrap_plots(plot_list, ncol = 1))
   }
 }
+
+
+#' Create standardized condition comparison plots
+#'
+#' @param data Data frame with columns: {metric}_prestim, {metric}_stim, {metric}_diff
+#' @param metric Character: column name prefix (e.g., "exponent", "offset", "itpc")
+#' @param metric_label Character: display name (e.g., "Aperiodic Exponent", "ITPC")
+#' @param color_palette List: optional custom colors for conditions and difference
+#' @param facet_ncol Integer: number of columns for faceting
+#'
+#' @return ggplot object
+plot_condition_comparison <- function(
+    data,
+    metric,
+    metric_label,
+    color_palette = NULL,
+    facet_ncol = 1) {
+  
+  # Default color palette if not provided
+  if (is.null(color_palette)) {
+    color_palette <- list(
+      conditions = c("#E76F51", "#2A9D8F"), # Coral and teal
+      difference = c("#264653")              # Dark blue
+    )
+  }
+  
+  # Construct metric names
+  metrics_to_plot <- glue::glue("{metric}_{c('prestim', 'stim', 'diff')}")
+  
+  # Construct labels
+  metric_labels <- setNames(
+    c(
+      glue::glue("Pre-stimulus\n{metric_label}"),
+      glue::glue("Stimulus\n{metric_label}"),
+      glue::glue("Change in\n{metric_label}")
+    ),
+    metrics_to_plot
+  )
+  
+  # Create plot
+  plot_metrics(
+    data,
+    metrics = metrics_to_plot,
+    group_axis = list(
+      conditions = c(glue::glue("{metric}_prestim"), glue::glue("{metric}_stim")),
+      difference = glue::glue("{metric}_diff")
+    ),
+    metric_labels = metric_labels,
+    color_palette = color_palette,
+    facet_ncol = facet_ncol
+  )
+}
