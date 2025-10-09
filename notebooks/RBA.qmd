@@ -84,10 +84,14 @@ p_itpc <- plot_condition_comparison(
 p_itpc
 
 
+```
+
+```{r}
+
+
 # ============================================================================
 # COMPUTE DIFFERENCES (WITHIN-SUBJECT)
 # ============================================================================
-
 # Load specparam data
 specparam <- readr::read_csv(here::here("data/specparam_all.csv")) %>%
   mutate(S = condition) %>%
@@ -116,6 +120,11 @@ p_offset
 ```
 
 ```{r}
+
+here::i_am("notebooks/Rba.qmd")  # Relative to project root
+# Use project root for shared outputs
+rba_base <- here::here("notebook")
+
 itpc_config <- list(
   name = "itpc",
   data = itpc_diff,
@@ -124,7 +133,9 @@ itpc_config <- list(
   plot_title = "ITPC Difference Effect (stim - prestim)",
   filltype = "RdBu",
   limits = c(-0.35, 0.35),
-  significance_threshold = 0.975
+  significance_threshold = 0.975,
+  rba_base <- here::here("notebooks")
+
 )
 
 run_rba <- function(cfg, atlas_df = desterieux) {
@@ -134,7 +145,8 @@ run_rba <- function(cfg, atlas_df = desterieux) {
     cat(glue("\n=== Running RBA for {name} ===\n"))
     run_rba_model(data = rba_data, 
                   model_name = model_name, 
-                  dist_y = dist_y)
+                  dist_y = dist_y,
+                  base_dir = rba_base)
 
     # assume this returns a list that includes $brain_plot
     extract_and_plot_rba(
@@ -143,7 +155,8 @@ run_rba <- function(cfg, atlas_df = desterieux) {
       plot_title = plot_title,
       filltype = filltype,
       limits = limits,
-      significance_threshold = significance_threshold
+      significance_threshold = significance_threshold,
+      base_dir = rba_base
     )
 
     # return all you care about

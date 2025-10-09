@@ -3,6 +3,7 @@ library(tibble)
 library(readr)
 library(dplyr)
 library(brms)
+library(here)
 
 
 #' Prepare data for RBA analysis by aggregating to subject×roi level
@@ -38,17 +39,23 @@ prepare_rba_data <- function(data, metric_col, avg_function = mean) {
 run_rba_model <- function(
     data,
     model_name,
+    base_dir = here::here(),
     dist_y = "student",
+    data_dir = "data_table",
     output_dir = "models",
     iterations = 5000,
     chains = 4
 ) {
-  # Ensure output directory exists
-  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  # Construct full paths
+  full_output_dir <- file.path(base_dir, output_dir)
+  full_data_dir <- file.path(base_dir, data_dir)
+  
+  # Ensure directories exist
+  dir.create(full_output_dir, recursive = TRUE, showWarnings = FALSE)
+  dir.create(full_data_dir, recursive = TRUE, showWarnings = FALSE)
   
   # Write data table
-  data_file <- glue::glue("data_table/{model_name}.tsv")
-  dir.create(dirname(data_file), recursive = TRUE, showWarnings = FALSE)
+  data_file <- file.path(full_data_dir, glue::glue("{model_name}.tsv"))
   
   write.table(
     data,
@@ -74,6 +81,9 @@ run_rba_model <- function(
     data_file
   )
   
+  cat(glue::glue("Running RBA model: {model_name}\n"))
+  cat(glue::glue("Data file: {data_file}\n"))
+  cat(glue::glue("Output dir: {full_output_dir}\n\n"))
   status <- system(cmd)
   
   # Move ridge plot if it exists
@@ -101,15 +111,25 @@ run_rba_model <- function(
 extract_and_plot_rba <- function(
     model_name,
     output_dir = "models",
+    base_dir = here::here(),
     atlas_df = NULL,
     plot_title = NULL,
     filltype = "RdBu",
     limits = NULL,
     significance_threshold = 0.975
 ) {
+  # Construct full path
+  full_output_dir <- file.path(base_dir, output_dir)
+  model_file <- file.path(full_output_dir, glue::glue("{model_name}.RData"))
+  
+  # Check if model file exists
+  if (!file.exists(model_file)) {
+    stop(glue::glue("Model file not found: {model_file}"))
+  }
+  
   # Load model results
   e <- new.env()
-  load(glue::glue("{output_dir}/{model_name}.RData"), envir = e)
+  load(model_file, envir = e)
   
   # Extract intercept effects
   intercept_effects <- extract_region_effects(
