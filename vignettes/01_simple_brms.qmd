@@ -13,81 +13,6 @@ execute:
   cache: true
 ---
 
-```{r}
-#| echo: false
-#| results: hide
-
-
-library(targets)
-library(here)
-library(brms)
-library(dplyr)
-library(tidyr)
-library(glue)
-library(here)
-library(conflicted)
-
-source(here::here("R/utils.R"))
-source(here::here("R/utils_viz.R"))
-
-source(here::here("targets", "targets_visualizations.R"))
-
-# Check if functions exist:
-exists("create_brain_plot")
-exists("extract_region_effects") 
-exists("my_brain_plot")
-
-
-has_store <- dir.exists(here::here("_targets"))
-
-if (has_store) {
-  store <- here::here("_targets")
-model_pt_stim <- targets::tar_read(model_pt_stim,        store = store)
-
-} else {
-  # Rendered by hand: use absolute, project-rooted paths
-  print("Targets need to be run")}
-
-
-
-
-
-# Helper function for computing differences
-compute_differences <- function(data, metrics) {
-  # First, aggregate
-  agg_data <- data %>%
-    group_by(subject, roi, P, T, S) %>%
-    summarise(across(all_of(metrics), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
-
-  # Pivot wider - this creates columns like metric_prestim, metric_stim
-  wide_data <- agg_data %>%
-    pivot_wider(
-      names_from = S,
-      values_from = all_of(metrics),
-      names_glue = "{.value}_{S}" # Explicit naming
-    )
-
-  # Debug: print column names to see what we actually have
-  cat("Columns after pivot_wider:", paste(names(wide_data), collapse = ", "), "\n")
-
-  # Compute differences for each metric
-  for (metric in metrics) {
-    stim_col <- paste0(metric, "_stim")
-    prestim_col <- paste0(metric, "_prestim")
-    diff_col <- paste0(metric, "_diff")
-
-    # Check if columns exist
-    if (stim_col %in% names(wide_data) && prestim_col %in% names(wide_data)) {
-      wide_data[[diff_col]] <- wide_data[[stim_col]] - wide_data[[prestim_col]]
-    } else {
-      warning(glue("Missing columns for {metric}: looking for {stim_col} and {prestim_col}"))
-      cat("Available columns:", paste(names(wide_data), collapse = ", "), "\n")
-    }
-  }
-
-  wide_data
-}
-```
 
 # Introduction online 
 
@@ -133,12 +58,111 @@ Structure of auditory stimulation. Adapted from @pellegrino2019TranscranialDirec
 
 To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we used a bayesian  approach - an RBA toolbox [@chen2019HandlingMultiplicityNeuroimaging]  based on `rbms` package which allow to quantify the difference between condition and probabilty P+ of effect being positive or negative.
 
+
+```{r}
+#| echo: false
+#| results: hide
+
+
+library(targets)
+library(here)
+library(brms)
+library(dplyr)
+library(tidyr)
+library(glue)
+library(here)
+library(conflicted)
+
+source(here::here("R/utils.R"))
+source(here::here("R/utils_viz.R"))
+
+source(here::here("targets", "targets_visualizations.R"))
+
+# Check if functions exist:
+exists("create_brain_plot")
+exists("extract_region_effects") 
+exists("my_brain_plot")
+
+
+has_store <- dir.exists(here::here("_targets"))
+
+if (has_store) {
+  store <- here::here("_targets")
+model_pt_stim <- targets::tar_read(model_pt_stim,        store = store)
+
+} else {
+  # Rendered by hand: use absolute, project-rooted paths
+  print("Targets need to be run")}
+
+
+# Helper function for computing differences
+compute_differences <- function(data, metrics) {
+  # First, aggregate
+  agg_data <- data %>%
+    group_by(subject, roi, P, T, S) %>%
+    summarise(across(all_of(metrics), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
+
+  # Pivot wider - this creates columns like metric_prestim, metric_stim
+  wide_data <- agg_data %>%
+    pivot_wider(
+      names_from = S,
+      values_from = all_of(metrics),
+      names_glue = "{.value}_{S}" # Explicit naming
+    )
+
+  # Debug: print column names to see what we actually have
+  cat("Columns after pivot_wider:", paste(names(wide_data), collapse = ", "), "\n")
+
+  # Compute differences for each metric
+  for (metric in metrics) {
+    stim_col <- paste0(metric, "_stim")
+    prestim_col <- paste0(metric, "_prestim")
+    diff_col <- paste0(metric, "_diff")
+
+    # Check if columns exist
+    if (stim_col %in% names(wide_data) && prestim_col %in% names(wide_data)) {
+      wide_data[[diff_col]] <- wide_data[[stim_col]] - wide_data[[prestim_col]]
+    } else {
+      warning(glue("Missing columns for {metric}: looking for {stim_col} and {prestim_col}"))
+      cat("Available columns:", paste(names(wide_data), collapse = ", "), "\n")
+    }
+  }
+
+  wide_data
+}
+
+
+
+run_rba <- function(cfg, atlas_df = desterieux) {
+   results <- with(cfg, {
+    rba_data <- prepare_rba_data(data, metric)
+    model_name <- glue("{name}_rba")
+    cat(glue("\n=== Running RBA for {name} ===\n"))
+    run_rba_model(data = rba_data, 
+                  model_name = model_name, 
+                  dist_y = dist_y,
+                  base_dir = rba_base)
+
+    # assume this returns a list that includes $brain_plot
+    extract_and_plot_rba(
+      model_name = model_name,
+      atlas_df = atlas_df,
+      plot_title = plot_title,
+      filltype = filltype,
+      limits = limits,
+      significance_threshold = significance_threshold,
+      base_dir = rba_base
+    )
+
+    # return all you care about
+   # list(model_name = model_name, fit = fit, plots = plots)
+  })
+}
+```
+
 ### ITPC
 
 The distribution is presented in the @fig-itpc.
-
-
-
 
 ```{r}
 #| label: fig-itpc
@@ -193,13 +217,14 @@ For both PRESTIM and STIM condition I want to check differences in  other condit
 
 When combined all condition together to obtain @fig-brain-itpc.
 
+The difference between ITPC  between STIM and PRESTIM condition is visualised across the scalp in @fig-brain-itpc
 
 ```{r}
 #| label: fig-brain-itpc
 #| echo: false
 #| message: false
 #| warning: false
-#| fig-cap: "Distribution of the evoked changed in ITPC by sound stimulation (STIM vs PRESTIM)"
+#| fig-cap: "Distribution of the evoked changed in ITPC by sound stimulation (STIM vs PRESTIM) after filtering out the regions wtih P+ "
 #| column: page         # span full page width (HTML)
 #| fig-width: 16        # inches on the graphics device
 #| fig-height: 8        # adjust to keep aspect you like
@@ -224,32 +249,6 @@ itpc_config <- list(
 
 )
 
-run_rba <- function(cfg, atlas_df = desterieux) {
-   results <- with(cfg, {
-    rba_data <- prepare_rba_data(data, metric)
-    model_name <- glue("{name}_rba")
-    cat(glue("\n=== Running RBA for {name} ===\n"))
-    run_rba_model(data = rba_data, 
-                  model_name = model_name, 
-                  dist_y = dist_y,
-                  base_dir = rba_base)
-
-    # assume this returns a list that includes $brain_plot
-    extract_and_plot_rba(
-      model_name = model_name,
-      atlas_df = atlas_df,
-      plot_title = plot_title,
-      filltype = filltype,
-      limits = limits,
-      significance_threshold = significance_threshold,
-      base_dir = rba_base
-    )
-
-    # return all you care about
-   # list(model_name = model_name, fit = fit, plots = plots)
-  })
-}
-
 itpc_rba <- run_rba(itpc_config )
 itpc_rba$brain_plot
 
@@ -260,16 +259,16 @@ itpc_rba$brain_plot
 
 Before we were collapsed data we wanted to check the differences using RBA 
 
-Now I want to run model via targets
-
-Now I want to  extract the ITPC data and visualise it across the scalp 
-
 
 ### Exponent 
 
-
+Figures 
 ```{r}
-
+#| label: fig-brain-exponent
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of the evoked changed in ITPC by sound stimulation (STIM vs PRESTIM) after filtering out the regions wtih P+ "
 
 # ============================================================================
 # COMPUTE DIFFERENCES (WITHIN-SUBJECT)
