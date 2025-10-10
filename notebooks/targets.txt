@@ -378,36 +378,6 @@ execute:
   cache: true
 ---
 
-```{r}
-#| echo: false
-#| results: hide
-
-
-library(targets)
-library(here)
-library(brms)
-
-# Test in R console first:
-library(here)
-source(here::here("R", "utils.R"))
-source(here::here("targets", "targets_visualizations.R"))
-
-# Check if functions exist:
-exists("create_brain_plot")
-exists("extract_region_effects") 
-exists("my_brain_plot")
-
-
-has_store <- dir.exists(here::here("_targets"))
-
-if (has_store) {
-  store <- here::here("_targets")
-model_pt_stim <- targets::tar_read(model_pt_stim,        store = store)
-
-} else {
-  # Rendered by hand: use absolute, project-rooted paths
-  print("Targets need to be run")}
-```
 
 # Introduction online 
 
@@ -449,11 +419,123 @@ Structure of auditory stimulation. Adapted from @pellegrino2019TranscranialDirec
 
 #  Current study
 
-###  Mapping of value distributions of variables of interest
-To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we used a bayes an RBA  package which allow to quantify the difference.
+###  Distribution of variables of interest
+
+To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we used a bayesian  approach - an RBA toolbox [@chen2019HandlingMultiplicityNeuroimaging]  based on `rbms` package which allow to quantify the difference between condition and probabilty P+ of effect being positive or negative.
 
 
 ```{r}
+#source(here::here("targets", "targets_visualizations.R"))
+
+has_store <- dir.exists(here::here("_targets"))
+
+if (has_store) {
+  store <- here::here("_targets")
+model_pt_stim <- targets::tar_read(model_pt_stim,        store = store)
+
+} else {
+  # Rendered by hand: use absolute, project-rooted paths
+  print("Targets need to be run")}
+```
+
+
+```{r}
+#| echo: false
+#| results: hide
+
+
+library(targets)
+library(here)
+library(brms)
+library(dplyr)
+library(tidyr)
+library(glue)
+library(here)
+library(conflicted)
+
+source(here::here("R/utils.R"))
+source(here::here("R/utils_viz.R"))
+
+
+# Check if functions exist:
+exists("create_brain_plot")
+exists("extract_region_effects") 
+exists("my_brain_plot")
+
+
+
+
+# Helper function for computing differences
+compute_differences <- function(data, metrics) {
+  # First, aggregate
+  agg_data <- data %>%
+    group_by(subject, roi, P, T, S) %>%
+    summarise(across(all_of(metrics), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
+
+  # Pivot wider - this creates columns like metric_prestim, metric_stim
+  wide_data <- agg_data %>%
+    pivot_wider(
+      names_from = S,
+      values_from = all_of(metrics),
+      names_glue = "{.value}_{S}" # Explicit naming
+    )
+
+  # Debug: print column names to see what we actually have
+  cat("Columns after pivot_wider:", paste(names(wide_data), collapse = ", "), "\n")
+
+  # Compute differences for each metric
+  for (metric in metrics) {
+    stim_col <- paste0(metric, "_stim")
+    prestim_col <- paste0(metric, "_prestim")
+    diff_col <- paste0(metric, "_diff")
+
+    # Check if columns exist
+    if (stim_col %in% names(wide_data) && prestim_col %in% names(wide_data)) {
+      wide_data[[diff_col]] <- wide_data[[stim_col]] - wide_data[[prestim_col]]
+    } else {
+      warning(glue("Missing columns for {metric}: looking for {stim_col} and {prestim_col}"))
+      cat("Available columns:", paste(names(wide_data), collapse = ", "), "\n")
+    }
+  }
+
+  wide_data
+}
+
+
+
+run_rba <- function(cfg, atlas_df = desterieux) {
+   results <- with(cfg, {
+    rba_data <- prepare_rba_data(data, metric)
+    model_name <- glue("{name}_rba")
+    cat(glue("\n=== Running RBA for {name} ===\n"))
+    run_rba_model(data = rba_data, 
+                  model_name = model_name, 
+                  dist_y = dist_y,
+                  base_dir = rba_base)
+
+    # assume this returns a list that includes $brain_plot
+    extract_and_plot_rba(
+      model_name = model_name,
+      atlas_df = atlas_df,
+      plot_title = plot_title,
+      filltype = filltype,
+      limits = limits,
+      significance_threshold = significance_threshold,
+      base_dir = rba_base
+    )
+
+    # return all you care about
+   # list(model_name = model_name, fit = fit, plots = plots)
+  })
+}
+```
+
+### ITPC
+
+The distribution is presented in the @fig-itpc.
+
+```{r}
+#| label: fig-itpc
 #| echo: false
 #| message: false
 #| warning: false
@@ -463,22 +545,19 @@ To examine potential differences in inter-trial phase coherence (ITPC) across ex
 #| fig-height: 8        # adjust to keep aspect you like
 #| fig-dpi: 200         # crisper lines when wider
 #| fig-align: center
+#| results: "hide" 
 # packages
-library(dplyr)
-library(tidyr)
-library(readr)
-library(here)
-library(ggplot2)
-library(ggdist)
-library(patchwork)
+# ============================================================================
+# COMPUTE DIFFERENCES (WITHIN-SUBJECT)
+# ============================================================================
 
-# --- load & tidy ---
+# Load ITPC data
 itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) %>%
   dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) %>%
   mutate(
     S = case_when(
       type == "prestim_itpc" ~ "prestim",
-      type == "stim_itpc"    ~ "stim",
+      type == "stim_itpc" ~ "stim",
       TRUE ~ type
     ),
     itpc = value
@@ -486,229 +565,181 @@ itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) %>%
   select(subject, roi, P, T, S, itpc) %>%
   distinct()
 
-# (optional but safe) average duplicate rows first
-itpc_avg <- itpc %>%
-  group_by(subject, roi, S) %>%
-  summarise(itpc = mean(itpc, na.rm = TRUE), .groups = "drop")
 
-# wide format + within-subject difference
-itpc_wide <- itpc_avg %>%
-  mutate(S = factor(S, levels = c("prestim", "stim"))) %>%
-  pivot_wider(names_from = S, values_from = itpc) %>%
-  drop_na(prestim, stim) %>%
-  mutate(diff_itpc = stim - prestim)
+itpc_diff <- compute_differences(itpc, "itpc")
+# ============================================================================
+# VISUALIZATION
+# ============================================================================
 
-library(scales)  # for nice breaks
 
-# --- shared x from data ---
-vals_cond <- itpc_avg$itpc
-vals_diff <- itpc_wide$diff_itpc
+p_itpc <- plot_condition_comparison(
+  data = itpc_diff,
+  metric = "itpc",
+  metric_label = "ITPC"
+)
+p_itpc
 
-rng          <- range(c(vals_cond, vals_diff), na.rm = TRUE)
-pad          <- diff(rng) * 0.04
-xlim_shared  <- c(rng[1] - pad, rng[2] + pad)
-breaks_shared <- breaks_extended(n = 7)(c(vals_cond, vals_diff))
-
-# ITPC by condition
-p_cond <- ggplot(itpc_avg, aes(x = itpc, y = S, fill = S)) +
-  stat_halfeye(point_interval = median_qi,
-               .width = c(0.50, 0.80, 0.95),
-               adjust = 0.7, slab_alpha = 0.6) +
-  scale_x_continuous(limits = xlim_shared,
-                     breaks = breaks_shared,
-                     expand = expansion(mult = c(0, 0.02))) +
-  labs(x = NULL, y = NULL) +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "none",
-        plot.title = element_blank(),
-        axis.text.x  = element_blank(),
-        axis.ticks.x = element_blank())
-
-# Paired differences (stim − prestim)
-p_diff <- ggplot(itpc_wide, aes(x = diff_itpc, y = "stim − prestim")) +
-  stat_halfeye(point_interval = median_qi,
-               .width = c(0.50, 0.80, 0.95),
-               adjust = 0.7, slab_alpha = 0.6, fill = "grey60") +
-  geom_vline(xintercept = 0, linetype = "dashed") +
-  scale_x_continuous(limits = xlim_shared,
-                     breaks = breaks_shared,
-                     expand = expansion(mult = c(0, 0.02))) +
-  labs(x = "Shared x-axis (from data)", y = NULL) +
-  theme_minimal(base_size = 12) +
-  theme(plot.title = element_blank())
-
-p_combined <- p_cond / p_diff + patchwork::plot_layout(heights = c(2, 1))
-p_combined
 ```
 
-Now I want to run model via targets
 
-Now I want to  extract the ITPC data and visualise it across the scalp 
+
+For both PRESTIM and STIM condition I want to check differences in  other conditions, in order to see if I can collapse conditions, but model  `itpc ~ 1 + P*T + (P*T|roi) + (1|subject)` is too complex and have a convergence issues. Instead I am using RBA ans pairs of simpler models.
+
+When combined all condition together to obtain @fig-brain-itpc.
+
+The difference between ITPC  between STIM and PRESTIM condition is visualised across the scalp in @fig-brain-itpc
+
 ```{r}
-# ---- deps ----
-library(dplyr)
-library(readr)
-library(stringr)
-library(ggseg)
-library(ggsegDesterieux)   # provides `desterieux`
-library(patchwork)
+#| label: fig-brain-itpc
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of the evoked changed in ITPC by sound stimulation (STIM vs PRESTIM) after filtering out the regions wtih P+ "
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+#| results: 'hide'
 
-# -----------------------------
-# 1) Read RBA EOI table (per ROI)
-# -----------------------------
-rba <- read.delim(here::here("notebooks", "itpc_diff_rba.txt"), comment.char = "#") %>%
-  janitor::clean_names()
+here::i_am("vignettes/01_simple_brms.qmd")  # Relative to project root
+# Use project root for shared outputs
+rba_base <- here::here("notebook")
 
-# >>> ADJUST HERE if your column names differ <<<
-# Try to standardize to: region, mean, sd, lower, upper, p_plus
-rba <- rba %>%
-  rename(
-    region = dplyr::coalesce(
-      dplyr::pick(where(is.character)) %>% dplyr::select(matches("^roi$|^region$|label$")) %>% dplyr::last_col()
-    ),
-    mean   = dplyr::coalesce(dplyr::pick(matches("^mean$|post.*mean|median$|beta$|b$")) %>% dplyr::last_col()),
-    sd     = dplyr::coalesce(dplyr::pick(matches("^sd$|se$")) %>% dplyr::last_col()),
-    lower  = dplyr::coalesce(dplyr::pick(matches("lower|2\\.5|025")) %>% dplyr::last_col()),
-    upper  = dplyr::coalesce(dplyr::pick(matches("upper|97\\.5|975")) %>% dplyr::last_col()),
-    p_plus = dplyr::coalesce(dplyr::pick(matches("pr.*0|p\\+|pd")) %>% dplyr::last_col())
-  ) %>%
-  dplyr::select(region, mean, sd, lower, upper, p_plus)
+itpc_config <- list(
+  name = "itpc",
+  data = itpc_diff,
+  metric = "itpc_diff",
+  dist_y = "student",
+  plot_title = "ITPC Difference Effect (stim - prestim)",
+  filltype = "RdBu",
+  limits = c(-0.35, 0.35),
+  significance_threshold = 0.975,
+  rba_base <- here::here("notebooks")
 
-# -----------------------------
-# 2) Make ROI names joinable
-# -----------------------------
-norm_roi <- function(x){
-  x %>%
-    tolower() %>%
-    str_replace_all("ctx-|lh-|rh-|^r-|^l-", "") %>%
-    str_replace_all("_|-", " ") %>%
-    str_squish()
-}
+)
 
-atlas <- ggsegDesterieux::desterieux %>%
-  mutate(region_norm = norm_roi(region)) %>%
-  distinct(region, region_norm, hemi, side, atlas)
+itpc_rba <- run_rba(itpc_config )
+itpc_rba$brain_plot
 
-rba_j <- rba %>%
-  mutate(region_norm = norm_roi(region)) %>%
-  left_join(atlas %>% distinct(region_norm, region_atlas = region), by = "region_norm") %>%
-  mutate(region = coalesce(region_atlas, region)) %>%
-  select(-region_norm, -region_atlas)
-
-# Sanity check: unmatched ROIs (fix by hand if any)
-unmatched <- anti_join(rba_j, atlas, by = "region")
-if(nrow(unmatched)){
-  warning("Some ROI names did not match the atlas:\n",
-          paste0(" - ", unmatched$region, collapse = "\n"))
-}
-
-# -----------------------------
-# 3) Extra derived measure: evidence (0..1) with direction
-# -----------------------------
-rba_j <- rba_j %>%
-  mutate(
-    # evidence strength away from 0.5, signed by mean
-    evidence = (abs(p_plus - 0.5) * 2) * sign(mean)
-  )
-
-# -----------------------------
-# 4) Brain maps (uses your my_brain_plot)
-# -----------------------------
-atlas_df <- ggsegDesterieux::desterieux
-
-# Posterior mean (ΔITPC), diverging around 0
-p_mean <- my_brain_plot(df = rba_j, atlas_df = atlas_df,
-                        parameter = mean, filltype = "Vik", legend = TRUE)
-
-# Evidence map (signed PD): negatives toward prestim, positives toward stim
-p_evidence <- my_brain_plot(df = rba_j, atlas_df = atlas_df,
-                            parameter = evidence, filltype = "RdBu", legend = TRUE)
-
-# Put them side by side
-p_brain <- p_mean + p_evidence + plot_layout(ncol = 2)
-p_brain
 ```
 
+
+
+
+Before we were collapsed data we wanted to check the differences using RBA 
+
+
+### Exponent 
+
+Figures 
 ```{r}
-# deps
-library(tidyverse)
-library(ggseg)
-library(ggsegDesterieux)  # atlas object: desterieux
-library(patchwork)
+#| label: fig-brain-exponent
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of the evoked changed in ITPC by sound stimulation (STIM vs PRESTIM) after filtering out the regions wtih P+ "
 
-# --- read just the "RBA results" table from the AFNI text report ---
-read_rba_region_table <- function(path){
-  raw <- readLines(path, warn = FALSE)
+# ============================================================================
+# COMPUTE DIFFERENCES (WITHIN-SUBJECT)
+# ============================================================================
+# Load specparam data
+specparam <- readr::read_csv(here::here("data/specparam_all.csv")) %>%
+  mutate(S = condition) %>%
+  select(subject, roi, P, T, S, exponent, error, offset) %>%
+  distinct()
 
-  # find the start of the RBA region-effects section
-  s <- grep("^===== Summary of region effects for Intercept \\(RBA results\\) =====$", raw)
-  if(length(s) == 0) stop("Could not find the 'RBA results' section in: ", path)
+specparam_diff <- compute_differences(specparam, c("exponent", "offset"))
 
-  # grab lines until the next '=====' section header (or EOF)
-  chunk <- raw[(s+1):length(raw)]
-  e <- grep("^===== ", chunk)
-  if(length(e)) chunk <- chunk[1:(e[1]-1)]
-  # drop blanks
-  chunk <- chunk[nchar(trimws(chunk)) > 0]
+# ============================================================================
+# VISUALIZATION
+# ============================================================================
 
-  # the first line is the header that lacks the ROI column; drop it
-  if(length(chunk) && grepl("^\\s*mean\\b", chunk[1])) chunk <- chunk[-1]
 
-  header <- c("region","mean","SD","P+","2.5%","5%","50%","95%","97.5%")
-  as_tibble(read.table(text = paste(chunk, collapse = "\n"),
-                       header = FALSE, col.names = header,
-                       check.names = FALSE, stringsAsFactors = FALSE))
-}
+p_exponent <- plot_condition_comparison(
+  data = specparam_diff,
+  metric = "exponent",
+  metric_label = "Aperiodic Exponent"
+)
+p_exponent
 
-# --- parse your file ---
-rba_tbl <- read_rba_region_table(here::here("notebooks","itpc_diff_rba.txt"))
+```
 
-# --- harmonize names to atlas (keep hemisphere!) ---
-norm_core <- function(x){
-  x |> tolower() |>
-    gsub("^ctx-", "", x) |>
-    gsub("^(lh|rh)_", "", x) |>
-    gsub("_", " ", ., fixed = TRUE) |>
-    trimws()
-}
 
-rba_for_plot <- rba_tbl %>%
-  mutate(
-    hemi = case_when(
-      grepl("^lh_", region) ~ "left",
-      grepl("^rh_", region) ~ "right",
-      TRUE ~ NA_character_
-    ),
-    region_plot = gsub("^(lh|rh)_", "", region)  # atlas uses region names without lh_/rh_
-  ) %>%
-  # signed 'evidence' in [−1, +1]; needs backticks for the non-syntactic name P+
-  mutate(evidence = (abs(`P+` - 0.5) * 2) * sign(mean)) %>%
-  # final columns to join on: region + hemi
-  transmute(region = region_plot, hemi, mean, evidence, p_plus = `P+`,
-            sd = SD, q025 = `2.5%`, q975 = `97.5%`)
+```{r}
+#| label: fig-brain-exponent
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of the exponent "
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+#| results: 'hide'
+#|
+exponent_config = list(
+  name = "exponent",
+  data = specparam_diff,
+  metric = "exponent_stim",
+  dist_y = "normal",
+  plot_title = "Exponent",
+  filltype = "Blues",
+  limits = NULL,
+    rba_base <- here::here("notebooks"),
+    significance_threshold = NULL  # Add this
 
-# quick sanity check: unmatched atlas keys (should be zero)
-atlas_keys <- ggsegDesterieux::desterieux %>% distinct(region, hemi)
-unmatched <- anti_join(rba_for_plot, atlas_keys, by = c("region","hemi"))
-if(nrow(unmatched)){
-  warning("Unmatched ROI labels after normalization:\n",
-          paste0(" - ", unmatched$hemi, " ", unmatched$region, collapse = "\n"))
-}
 
-# --- plots with your helper ---
-atlas_df <- ggsegDesterieux::desterieux
+)
 
-p_mean <- my_brain_plot(df = rba_for_plot, atlas_df = atlas_df,
-                        parameter = mean, filltype = "Vik", legend = TRUE)
+exponent_rba <- run_rba(exponent_config  )
+exponent_rba$brain_plot
+```
 
-p_ev <- my_brain_plot(df = rba_for_plot, atlas_df = atlas_df,
-                      parameter = evidence, filltype = "RdBu", legend = TRUE)
 
-p_brain <- p_mean + p_ev + plot_layout(ncol = 2)
-p_brain
+## Offset
 
-# (optional) show in a new window regardless of OS
-dev.new(width = 12, height = 6); print(p_brain)
+```{r}
+p_offset <- plot_condition_comparison(
+  data = specparam_diff,
+  metric = "offset",
+  metric_label = "Spectral Offset"
+)
+p_offset
+```
+
+
+
+```{r}
+#| label: fig-brain-offset
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of the exponent "
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+#| results: 'hide'
+#|
+exponent_config = list(
+  name = "offset",
+  data = specparam_diff,
+  metric = "offset_stim",
+  dist_y = "normal",
+  plot_title = "Exponent",
+  filltype = "BuGn",
+  limits = NULL,
+    rba_base <- here::here("notebooks"),
+    significance_threshold = NULL  # Add this
+
+
+)
+
+exponent_rba <- run_rba(exponent_config  )
+exponent_rba$brain_plot
 ```
 
 
@@ -1633,14 +1664,196 @@ itpc_resources <- function(max_chains = NULL) {
 <document index="14">
 <source>./R/utils.R</source>
 <document_content>
-library(ggseg)
-library(ggplot2)
+
 library(tibble)
 library(readr)
 library(dplyr)
-library(scico)
-library(ggsegDesterieux)
-library(RColorBrewer)
+library(brms)
+library(here)
+
+
+#' Prepare data for RBA analysis by aggregating to subject×roi level
+#'
+#' @param data Data frame with subject, roi, and metric columns
+#' @param metric_col Character: name of metric column to analyze
+#' @param avg_function Function: how to aggregate (default: mean)
+#' @return Data frame with columns: Subj, ROI, Y
+prepare_rba_data <- function(data, metric_col, avg_function = mean) {
+  data %>%
+    group_by(subject, roi) %>%
+    summarise(
+      value = avg_function(.data[[metric_col]], na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    transmute(
+      Subj = subject,
+      ROI = roi,
+      Y = value
+    ) %>%
+    tidyr::drop_na(Y)
+}
+
+#' Run RBA model with standardized settings
+#'
+#' @param data Data frame with columns: Subj, ROI, Y
+#' @param model_name Character: prefix for output files
+#' @param dist_y Character: distribution type ("student" or "normal")
+#' @param output_dir Character: directory for model outputs (default: "models")
+#' @param iterations Integer: MCMC iterations
+#' @param chains Integer: number of chains
+#' @return Integer: system command exit status
+run_rba_model <- function(
+    data,
+    model_name,
+    base_dir = here::here(),
+    dist_y = "student",
+    data_dir = "data_table",
+    output_dir = "models",
+    iterations = 5000,
+    chains = 4
+) {
+  # Construct full paths
+  full_output_dir <- file.path(base_dir, output_dir)
+  full_data_dir <- file.path(base_dir, data_dir)
+  
+  # Ensure directories exist
+  dir.create(full_output_dir, recursive = TRUE, showWarnings = FALSE)
+  dir.create(full_data_dir, recursive = TRUE, showWarnings = FALSE)
+  
+  # Write data table
+  data_file <- file.path(full_data_dir, glue::glue("{model_name}.tsv"))
+  
+  write.table(
+    data,
+    file = data_file,
+    sep = "\t",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = TRUE,
+    na = "NA"
+  )
+  
+  # Construct and run RBA command
+  cmd <- paste(
+    "RBA",
+    glue::glue("-prefix {output_dir}/{model_name}"),
+    glue::glue("-chains {chains}"),
+    glue::glue("-iterations {iterations}"),
+    "-model 1",
+    "-EOI 'Intercept'",
+    "-ridgePlot 10 8",
+    glue::glue("-distY '{dist_y}'"),
+    "-dataTable",
+    data_file
+  )
+  
+  cat(glue::glue("Running RBA model: {model_name}\n"))
+  cat(glue::glue("Data file: {data_file}\n"))
+  cat(glue::glue("Output dir: {full_output_dir}\n\n"))
+  status <- system(cmd)
+  
+  # Move ridge plot if it exists
+  ridge_file <- "Intercept_ridge.png"
+  if (file.exists(ridge_file)) {
+    fs::file_move(
+      ridge_file,
+      glue::glue("{output_dir}/{model_name}_intercept_ridge.png")
+    )
+  }
+  
+  invisible(status)
+}
+
+#' Extract and visualize RBA results
+#'
+#' @param model_name Character: name of the RBA model
+#' @param output_dir Character: directory containing model outputs
+#' @param atlas_df Data frame: brain atlas for visualization
+#' @param plot_title Character: title for brain plot
+#' @param filltype Character: color palette for brain plot
+#' @param limits Numeric vector: color scale limits (optional)
+#' @param significance_threshold Numeric: P+ threshold for significance (default: NULL)
+#' @return List with: results_df, significant_rois, brain_plot
+extract_and_plot_rba <- function(
+    model_name,
+    output_dir = "models",
+    base_dir = here::here(),
+    atlas_df = NULL,
+    plot_title = NULL,
+    filltype = "RdBu",
+    limits = NULL,
+    significance_threshold = NULL
+) {
+  # Construct full path
+  full_output_dir <- file.path(base_dir, output_dir)
+  model_file <- file.path(full_output_dir, glue::glue("{model_name}.RData"))
+  
+  # Check if model file exists
+  if (!file.exists(model_file)) {
+    stop(glue::glue("Model file not found: {model_file}"))
+  }
+  
+  # Load model results
+  e <- new.env()
+  load(model_file, envir = e)
+  
+  # Extract intercept effects
+  intercept_effects <- extract_region_effects(
+    fit = e$fm,
+    region_var = "ROI",
+    parameter = "Intercept",
+    digits = 4
+  )
+  
+  # Create results dataframe
+  results_df <- data.frame(
+    label = rownames(intercept_effects),
+    mean_effect = intercept_effects$mean,
+    sd = intercept_effects$SD,
+    p_plus = intercept_effects$`P+`,
+    lower95 = intercept_effects$`2.5%`,
+    upper95 = intercept_effects$`97.5%`
+  )
+  
+  # Filter significant ROIs - CORRECTED CODE
+  if (!is.null(significance_threshold)) {
+    selected_rois <- results_df %>% 
+      dplyr::filter(
+        p_plus > significance_threshold | 
+          p_plus < (1 - significance_threshold)
+      ) %>%
+      arrange(desc(abs(mean_effect)))
+  } else {
+    # If no threshold, return all ROIs sorted by effect size
+    selected_rois <- results_df %>%
+      arrange(desc(abs(mean_effect)))
+  }
+  
+  
+  # Create brain plot if atlas provided
+  brain_plot <- NULL
+  if (!is.null(atlas_df)) {
+    brain_plot <- my_brain_plot(
+      df = selected_rois,
+      atlas_df = atlas_df,
+      parameter = mean_effect,
+      filltype = filltype,
+      legend = TRUE,
+      limits = limits
+    )
+    
+    if (!is.null(plot_title)) {
+      brain_plot <- brain_plot + ggtitle(plot_title)
+    }
+  }
+  
+  # Return results
+  list(
+    results_df = results_df,
+    significant_rois = significant_rois,
+    brain_plot = brain_plot
+  )
+}
 
 
 write_df_csv <- function(df, path) {
@@ -1653,61 +1866,7 @@ write_df_csv <- function(df, path) {
   path  # return the file path so targets can track it
 }
 
-my_brain_plot <- function(df, atlas_df, parameter, filltype = "Blues", legend = FALSE) {
-  # Define the expressions for each color palette
-  Blues_expr <- 'scale_fill_distiller(palette = "Blues", direction = 1)'
-  BuGn_expr <- 'scale_fill_distiller(palette = "BuGn", direction = 1)'
-  Purples_expr <- 'scale_fill_distiller(palette = "Purples", direction = 1)'
-  Vik_expr <- 'scale_fill_scico(palette = "vik",midpoint = 0)'
-  # -1 reverses direction scales 
-  RdBu_expr <- 'scale_fill_distiller(palette = "RdBu", direction = -1)' 
-  RdYlBu_expr <- 'scale_fill_distiller(palette = "RdYlBu", direction = -1)'
-  Spectral_expr <- 'scale_fill_distiller(palette = "Spectral", direction = 1)'
 
-
-
-  # Use switch to select the appropriate expression based on filtype
-  color_palette <- switch(filltype,
-    "Blues" = Blues_expr,
-    "BuGn" = BuGn_expr,
-    "Purples" = Purples_expr,
-    "Vik" = Vik_expr,
-    "RdBu" = RdBu_expr,
-    "RdYlBu" = RdYlBu_expr,
-    "Spectral" = Spectral_expr,
-    stop("Unknown filltype") # Default case if none of the above matches
-  )
-  # Go further with analysis
-  parameter <- enquo(parameter)
-  df_combined <- atlas_df %>%
-    as_tibble() %>%
-    left_join(df) %>%
-    as_brain_atlas()
-
-  p <- ggplot() +
-    ggseg::geom_brain(
-      atlas = df_combined,
-      mapping = aes(fill = !!parameter),
-      position = position_brain(side ~ hemi),
-      show.legend = legend
-    ) +
-    theme(
-      panel.background = element_blank(),
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.ticks = element_blank(),
-      axis.text.x = element_blank(),
-      axis.text.y = element_blank(),
-      axis.title.x = element_blank(),
-      axis.title.y = element_blank(),
-      plot.background = element_rect(fill = "transparent", colour = NA),
-      plot.margin = unit(c(-1, -1.2, -1.2, -1.5), "cm"), # Edited code
-      legend.position = "none"
-    ) + # Left margin
-    theme_void() +
-    eval(rlang::parse_expr(color_palette)) +
-    theme(legend.position = "bottom")
-}
 
 
 extractorRData <- function(file, object = NULL) {
@@ -1786,6 +1945,319 @@ extract_region_effects <- function(fit, region_var = "roi", parameter = "Interce
 </document_content>
 </document>
 <document index="15">
+<source>./R/utils_viz.R</source>
+<document_content>
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggdist)
+library(scales)
+library(patchwork)
+library(ggseg)
+library(ggsegDesterieux)
+library(RColorBrewer)
+library(scico)
+
+
+plot_metrics <- function(
+    data,
+    metrics,
+    hue = NULL,
+    group_axis = "auto",     
+    facet_ncol = 1,
+    widths = c(0.50, 0.80, 0.95),
+    add_zero_line = TRUE,
+    base_size = 12,
+    color_palette = NULL,      # NEW: single palette or list of palettes per group
+    metric_labels = NULL       # NEW: named vector for custom labels
+) {
+  
+  # Apply custom labels if provided
+  if (!is.null(metric_labels)) {
+    # Ensure all metrics have labels
+    missing_labels <- setdiff(metrics, names(metric_labels))
+    if (length(missing_labels) > 0) {
+      warning(paste("No labels provided for:", paste(missing_labels, collapse = ", ")))
+      # Use original names for missing labels
+      for (m in missing_labels) {
+        metric_labels[m] <- m
+      }
+    }
+  } else {
+    # Use original names
+    metric_labels <- setNames(metrics, metrics)
+  }
+  
+  # Determine axis grouping
+  if (is.list(group_axis)) {
+    metric_groups <- group_axis
+  } else if (is.character(group_axis) && length(group_axis) == 1) {
+    if (group_axis == "auto") {
+      diff_metrics <- metrics[grepl("diff|change|delta", metrics, ignore.case = TRUE)]
+      base_metrics <- setdiff(metrics, diff_metrics)
+      
+      if (length(diff_metrics) > 0 && length(base_metrics) > 0) {
+        metric_groups <- list(
+          base = base_metrics,
+          diff = diff_metrics
+        )
+      } else {
+        metric_groups <- list(all = metrics)
+      }
+    } else if (group_axis == "all") {
+      metric_groups <- list(all = metrics)
+    } else if (group_axis == "none") {
+      metric_groups <- as.list(metrics)
+      names(metric_groups) <- metrics
+    } else {
+      stop("group_axis must be 'auto', 'all', 'none', or a list")
+    }
+  } else {
+    stop("group_axis must be a character string or a list")
+  }
+  
+  # Prepare color palettes
+  if (is.null(color_palette)) {
+    # Default palettes
+    palettes_list <- rep(list(NULL), length(metric_groups))
+  } else if (is.list(color_palette) && !is.null(names(color_palette))) {
+    # Named list of palettes per group
+    palettes_list <- lapply(names(metric_groups), function(g) {
+      color_palette[[g]]
+    })
+  } else if (!is.list(color_palette) || all(sapply(color_palette, is.character))) {
+    # Single palette for all groups
+    palettes_list <- rep(list(color_palette), length(metric_groups))
+  } else {
+    # Unnamed list of palettes
+    palettes_list <- color_palette
+  }
+  
+  # Create a plot for each group
+  plot_list <- lapply(seq_along(metric_groups), function(i) {
+    group_name <- names(metric_groups)[i]
+    group_metrics <- metric_groups[[group_name]]
+    group_palette <- palettes_list[[i]]
+    
+    # Determine columns to keep
+    cols_to_keep <- if (!is.null(hue)) {
+      c(group_metrics, hue)
+    } else {
+      group_metrics
+    }
+    
+    # Create long format
+    long <- data %>%
+      select(any_of(cols_to_keep)) %>%
+      pivot_longer(
+        cols = all_of(group_metrics), 
+        names_to = "metric", 
+        values_to = "value"
+      ) %>%
+      mutate(
+        metric = factor(metric, levels = group_metrics),
+        metric_label = factor(metric_labels[as.character(metric)], 
+                              levels = metric_labels[group_metrics]),
+        y_dummy = ""
+      )
+    
+    # Calculate x limits
+    rng <- range(long$value, na.rm = TRUE)
+    pad <- diff(rng) * 0.04
+    xlim_group <- c(rng[1] - pad, rng[2] + pad)
+    
+    # Build plot
+    p <- ggplot(long, aes(x = value, y = y_dummy)) +
+      stat_halfeye(
+        aes(fill = if (is.null(hue)) metric else .data[[hue]],
+            color = if (is.null(hue)) metric else .data[[hue]]),
+        point_interval = median_qi,
+        .width = widths,
+        adjust = 0.7,
+        slab_alpha = 0.6
+      ) +
+      facet_wrap(
+        ~ metric_label,  # Use labels instead of raw metric names
+        ncol = facet_ncol,
+        scales = "fixed",
+        strip.position = "top"
+      ) +
+      scale_x_continuous(
+        limits = xlim_group, 
+        breaks = breaks_extended(7),
+        expand = expansion(mult = c(0.02, 0.02))
+      ) +
+      scale_y_discrete(expand = expansion(add = c(0.5, 0.5))) +
+      labs(x = NULL, y = NULL) +
+      theme_minimal(base_size = base_size) +
+      theme(
+        legend.position = if (is.null(hue)) "none" else "right",
+        strip.text = element_text(face = "bold", size = rel(1.0)),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.spacing.y = unit(0.5, "lines")
+      )
+    
+    # Apply custom color palette
+    if (!is.null(group_palette)) {
+      if (is.null(hue)) {
+        p <- p + 
+          scale_fill_manual(values = group_palette) +
+          scale_color_manual(values = group_palette)
+      } else {
+        # For hue coloring, apply palette to the hue variable
+        p <- p + 
+          scale_fill_manual(values = group_palette) +
+          scale_color_manual(values = group_palette)
+      }
+    }
+    
+    # Add zero line
+    if (add_zero_line) {
+      has_diff <- any(grepl("diff|change|delta", group_metrics, ignore.case = TRUE))
+      if (has_diff) {
+        # Create vline data with labeled metrics
+        vline_data <- data.frame(
+          metric = factor(group_metrics, levels = group_metrics),
+          y_dummy = ""
+        ) %>%
+          mutate(metric_label = factor(metric_labels[as.character(metric)],
+                                       levels = metric_labels[group_metrics]))
+        
+        p <- p + geom_vline(
+          data = vline_data,
+          aes(xintercept = 0),
+          linetype = "dashed",
+          alpha = 0.5
+        )
+      }
+    }
+    
+    return(p)
+  })
+  
+  # Combine plots
+  if (length(plot_list) == 1) {
+    return(plot_list[[1]])
+  } else {
+    return(wrap_plots(plot_list, ncol = 1))
+  }
+}
+
+
+#' Create standardized condition comparison plots
+#'
+#' @param data Data frame with columns: {metric}_prestim, {metric}_stim, {metric}_diff
+#' @param metric Character: column name prefix (e.g., "exponent", "offset", "itpc")
+#' @param metric_label Character: display name (e.g., "Aperiodic Exponent", "ITPC")
+#' @param color_palette List: optional custom colors for conditions and difference
+#' @param facet_ncol Integer: number of columns for faceting
+#'
+#' @return ggplot object
+plot_condition_comparison <- function(
+    data,
+    metric,
+    metric_label,
+    color_palette = NULL,
+    facet_ncol = 1) {
+  
+  # Default color palette if not provided
+  if (is.null(color_palette)) {
+    color_palette <- list(
+      conditions = c("#E76F51", "#2A9D8F"), # Coral and teal
+      difference = c("#264653")              # Dark blue
+    )
+  }
+  
+  # Construct metric names
+  metrics_to_plot <- glue::glue("{metric}_{c('prestim', 'stim', 'diff')}")
+  
+  # Construct labels
+  metric_labels <- setNames(
+    c(
+      glue::glue("Pre-stimulus\n{metric_label}"),
+      glue::glue("Stimulus\n{metric_label}"),
+      glue::glue("Change in\n{metric_label}")
+    ),
+    metrics_to_plot
+  )
+  
+  # Create plot
+  plot_metrics(
+    data,
+    metrics = metrics_to_plot,
+    group_axis = list(
+      conditions = c(glue::glue("{metric}_prestim"), glue::glue("{metric}_stim")),
+      difference = glue::glue("{metric}_diff")
+    ),
+    metric_labels = metric_labels,
+    color_palette = color_palette,
+    facet_ncol = facet_ncol
+  )
+}
+
+
+my_brain_plot <- function(df, atlas_df, parameter, filltype = "Blues", legend = FALSE, limits = NULL) {
+  # Define the expressions for each color palette
+  Blues_expr <- 'scale_fill_distiller(palette = "Blues", direction = 1, limits = limits)'
+  BuGn_expr <- 'scale_fill_distiller(palette = "BuGn", direction = 1, limits = limits)'
+  Purples_expr <- 'scale_fill_distiller(palette = "Purples", direction = 1, limits = limits)'
+  Vik_expr <- 'scale_fill_scico(palette = "vik",midpoint = 0, limits = limits)'
+  # -1 reverses direction scales 
+  RdBu_expr <- 'scale_fill_distiller(palette = "RdBu", direction = -1, limits = limits)' 
+  RdYlBu_expr <- 'scale_fill_distiller(palette = "RdYlBu", direction = -1, limits = limits)'
+  Spectral_expr <- 'scale_fill_distiller(palette = "Spectral", direction = 1, limits = limits)'
+  
+  
+  
+  # Use switch to select the appropriate expression based on filtype
+  color_palette <- switch(filltype,
+                          "Blues" = Blues_expr,
+                          "BuGn" = BuGn_expr,
+                          "Purples" = Purples_expr,
+                          "Vik" = Vik_expr,
+                          "RdBu" = RdBu_expr,
+                          "RdYlBu" = RdYlBu_expr,
+                          "Spectral" = Spectral_expr,
+                          stop("Unknown filltype") # Default case if none of the above matches
+  )
+  # Go further with analysis
+  parameter <- enquo(parameter)
+  df_combined <- atlas_df %>%
+    as_tibble() %>%
+    left_join(df) %>%
+    as_brain_atlas()
+  
+  p <- ggplot() +
+    ggseg::geom_brain(
+      atlas = df_combined,
+      mapping = aes(fill = !!parameter),
+      position = position_brain(side ~ hemi),
+      show.legend = legend
+    ) +
+    theme(
+      panel.background = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.ticks = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      plot.background = element_rect(fill = "transparent", colour = NA),
+      plot.margin = unit(c(-1, -1.2, -1.2, -1.5), "cm"), # Edited code
+      legend.position = "none"
+    ) + # Left margin
+    theme_void() +
+    eval(rlang::parse_expr(color_palette)) +
+    theme(legend.position = "bottom")
+  
+  
+  return(p)
+}
+</document_content>
+</document>
+<document index="16">
 <source>./renv/activate.R</source>
 <document_content>
 
@@ -3125,21 +3597,28 @@ local({
 
 </document_content>
 </document>
-<document index="16">
-<source>./notebooks/TEST_RBA.qmd</source>
+<document index="17">
+<source>./notebooks/EDA_irba_specparam.qmd</source>
 <document_content>
 ---
-title: "TEST_RBA"
-format: typst-pdf
+title: "EDA_rba_itpc"
+format: html
+editor: visual
 ---
+
+# Put final version for itpce
 
 ```{r}
 library(dplyr)
-library(ggplot2)
-library(ggdist)  
 library(tidyr)
-library(patchwork)
+library(glue)
+library(here)
 
+source(here::here("R/utils.R"))
+source(here::here("R", "utils_viz.R"))
+```
+
+```{r}
 itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) |>
   dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) |>
   dplyr::mutate(
@@ -3152,44 +3631,506 @@ itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) |>
   ) |>
   dplyr::select(subject, roi, P, T, S, itpc) |>
   dplyr::distinct() #|>
-#  dplyr::filter(P == "pre")
 
-head(itpc)
+print(itpc)
 
-
-
-# (Optional but safe) collapse duplicates first
-itpc_avg <- itpc %>%
-  group_by(subject, roi, S) %>%
-  summarise(itpc = mean(itpc, na.rm = TRUE), .groups = "drop")
-
-# Wide format: one row per subject × roi × T
-itpc_wide <- itpc_avg %>%
-  mutate(S = factor(S, levels = c("prestim", "stim"))) %>%  # ensure column order
-  pivot_wider(
-    names_from  = S,
-    values_from = itpc
+# Method 1: Compute differences FIRST, then average
+itpc_diff <- itpc  %>%
+  select(subject, roi, P, T, S, itpc) %>%
+  # Aggregate within each subject×roi×P×T×S combination
+  group_by(subject, roi, P, T, S) %>%
+  summarise(
+    itpc = mean(itpc, na.rm = TRUE),
+    .groups = "drop"
   ) %>%
-  # compute differences
+  # Pivot to wide format
+  pivot_wider(
+    names_from = S,
+    values_from = c(itpc),
+        names_prefix = "itpc_"
+
+  ) %>%
+  # Compute WITHIN-SUBJECT differences
   mutate(
-    diff_itpc = stim - prestim,                      # absolute difference
+    itpc_diff = itpc_stim - itpc_prestim
   )
 
-# If you want to drop rows missing either condition:
-itpc_wide <- itpc_wide %>% tidyr::drop_na(prestim, stim)
+# ITPC plot
+p_itpc <- plot_condition_comparison(
+  data = itpc_diff,
+  metric = "itpc",
+  metric_label = "ITPC"
+)
+p_itpc
 
-itpc_wide %>% glimpse()
+```
+# Running rba for itpc
 
-p_halfeye <- ggplot(itpc, aes(y = S, x = itpc, fill = S)) +
-  stat_halfeye(point_interval = median_qi,
-               .width = c(0.50, 0.80, 0.95),
-               adjust = 0.7, slab_alpha = 0.6) +
-  scale_x_continuous(limits = c(0, 1)) +
-  labs(title = "Half-eye: distribution and quantile intervals", x = "ITPC", y = NULL) +
-  theme(legend.position = "none")
-p_halfeye 
+```{r}
+itpc_final<- itpc_diff  %>%
+  group_by(subject, roi) %>%
+  summarise(itpc_diff  = mean(itpc_diff, na.rm = TRUE), .groups = "drop") %>% 
+  transmute(
+    Subj = subject,
+    ROI  = roi,
+    Y    = itpc_diff 
+  ) %>%
+  arrange(Subj, ROI, Y) %>%
+  tidyr::drop_na(Y)
+
+model_name <- "itpc_rba"
+data_table_file <- glue("{model_name}.tsv")
+write.table(
+  itpc_final,
+  file = data_table_file,
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE, na = "NA"
+)
+read.delim(data_table_file) %>% dplyr::glimpse()
+
+
+
+
+# 0) sanity checks
+stopifnot(file.exists(data_table_file)) # Subj ROI Y
+system("RBA -help | head -n 5") # confirm it's on PATH
+
+
+# 1) run RBA (blocking; prints to the notebook)
+cmd <- paste(
+  "RBA",
+  glue("-prefix models/{model_name}"),
+  "-chains 4",
+  "-iterations 5000",
+  "-model 1",
+  "-EOI 'Intercept'",
+  " -ridgePlot 10 8 ",
+  "-distY 'student'", # robust if your Y has outliers
+  "-dataTable ",
+  data_table_file
+)
+status <- system(cmd)
+fs::file_move("Intercept_ridge.png", glue("models/", model_name, "_", "intercept_ridge.png"))
+
+# 2) read results back into R
+# res <- read.delim("specparam_exponent_rba.txt", comment.char = "#")
+# head(res)
+
+e <- new.env()
+load(here::here(glue("notebooks/models/{model_name}.RData")), envir = e)
+
+ls(e) # see what's inside
+spectral_offset_sigma <- e$fm # pull just the object(s) you want
+model <- e$model
+
+
+# Extract ONLY the Intercept effects (the only population-level effect in your model)
+intercept_effects <- extract_region_effects(
+  fit = spectral_offset_sigma,
+  region_var = "ROI", # Use "ROI" (capital) - RBA default
+  parameter = "Intercept",
+  digits = 4
+)
+
+results_df <- intercept_effects %>% # Create results dataframe
+  data.frame(
+  label = rownames(intercept_effects),
+  mean_effect = intercept_effects$mean,
+  sd = intercept_effects$SD,
+  p_plus = intercept_effects$`P+`)
+
+# Filter for  ROIs having a strong evidence of offect
+significant_rois <- results_df %>%
+  dplyr::filter(p_plus > 0.975 | p_plus < 0.025) %>%  # Changed from s_effect_pplus
+  arrange(desc(abs(mean_effect)))  # Changed from s_effect
+
+print("Number of ROIs with significant effect:")
+print(nrow(significant_rois))
+
+print("\nTop 10 ROIs by absolute effect size:")
+print(head(significant_rois, 10))
+
+# Now the plot should work
+p_mean_all <- my_brain_plot(
+  df = significant_rois,
+  atlas_df = desterieux,
+  parameter = mean_effect,
+  filltype = "RdBu",
+  legend = TRUE,
+  limits = c(-0.4, 0.4)
+) +
+  ggtitle("ITPC Difference Effect (stim - prestim)\n(All ROIs)")
+
+p_mean_all
+```
+
+
+
+
+# Change in aperiodic exponent
+
+
+
+```{r}
+
+
+specparam <- readr::read_csv(here::here("data/specparam_all.csv")) %>%
+  dplyr::mutate(S = condition) %>%
+  select(subject, roi, P, T, S, exponent, error, offset) %>%
+  distinct()
+print(specparam)
+
+# Method 1: Compute differences FIRST, then average
+specparam_diff <- specparam %>%
+  select(subject, roi, P, T, S, exponent, offset) %>%
+  # Aggregate within each subject×roi×P×T×S combination
+  group_by(subject, roi, P, T, S) %>%
+  summarise(
+    exponent = mean(exponent, na.rm = TRUE),
+    offset = mean(offset, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Pivot to wide format
+  pivot_wider(
+    names_from = S,
+    values_from = c(exponent, offset)
+  ) %>%
+  # Compute WITHIN-SUBJECT differences
+  mutate(
+    exponent_diff = exponent_stim - exponent_prestim,
+    offset_diff = offset_stim - offset_prestim
+  )
+
+head(specparam_diff)
+
+
+# Exponent plot
+p_exponent <- plot_condition_comparison(
+  data = specparam_diff,
+  metric = "exponent",
+  metric_label = "Aperiodic Exponent"
+)
+p_exponent
+
+# Offset plot
+p_offset <- plot_condition_comparison(
+  data = specparam_diff,
+  metric = "offset",
+  metric_label = "Spectral Offset"
+)
+p_offset
+# metrics <- metrics_to_plot
+
+
+```
+
+```{r}
+# check current PATH and whether RBA is visible
+Sys.getenv("PATH")
+Sys.which("RBA")
+
+# common install locations — add what applies on your machine
+cand <- c(
+  file.path(Sys.getenv("HOME"), "abin"),
+  "/usr/local/bin",
+  "/opt/homebrew/bin", # Apple Silicon Homebrew
+  "/usr/local/afni/bin", # generic
+  Sys.getenv("CONDA_PREFIX")
+) # if installed via conda
+
+cand <- cand[file.exists(cand)]
+Sys.setenv(PATH = paste(c(cand, Sys.getenv("PATH")), collapse = .Platform$path.sep))
+Sys.which("RBA") # should now show a path
+```
+
+
+
+# Running RBA for specparam
+
+```{r}
+# Now average the differences (not the conditions separately)
+specparam_avg <- specparam_diff %>%
+  group_by(subject, roi) %>%
+  summarise(
+    # Keep individual conditions for plotting
+    exponent_prestim = mean(exponent_prestim, na.rm = TRUE),
+    exponent_stim = mean(exponent_stim, na.rm = TRUE),
+    offset_prestim = mean(offset_prestim, na.rm = TRUE),
+    offset_stim = mean(offset_stim, na.rm = TRUE),
+    # Mean of differences (correct for paired data!)
+    exponent_diff = mean(exponent_diff, na.rm = TRUE),
+    offset_diff = mean(offset_diff, na.rm = TRUE),
+    n_pairs = n(), # How many P×T combinations
+    .groups = "drop"
+  )
+
+# Verify the difference
+specparam_avg %>%
+  mutate(
+    # This should equal exponent_diff (it does!)
+    check = exponent_stim - exponent_prestim
+  ) %>%
+  select(subject, roi, exponent_diff, check) %>%
+  head()
+```
+
+
+```{r}
+# assumes you already have: itpc_wide with columns: subject, roi, prestim, stim
+specparam_rba_diff <- specparam_avg %>%
+  transmute(
+    Subj = subject,
+    ROI  = roi,
+    Y    = (exponent_prestim + exponent_stim) / 2
+  ) %>%
+  tidyr::drop_na(Y)
+
+write.table(
+  specparam_rba_diff,
+  file = "specparam_rba_exponent.tsv",
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE, na = "NA"
+)
+
+
+read.delim("specparam_rba_exponent.tsv") %>% dplyr::glimpse()
+```
+
+
+```{r}
+# 0) sanity checks
+model_name <- "specparam_rba_exponent"
+data_table_file <- glue("{model_name}.tsv")
+stopifnot(file.exists(data_table_file)) # Subj ROI Y
+system("RBA -help | head -n 5") # confirm it's on PATH
+
+
+# 1) run RBA (blocking; prints to the notebook)
+cmd <- paste(
+  "RBA",
+  glue("-prefix models/{model_name}"),
+  "-chains 4",
+  "-iterations 5000",
+  "-model 1",
+  "-EOI 'Intercept'",
+  " -ridgePlot 10 8 ",
+  "-distY 'normal'", # robust if your Y has outliers
+  "-dataTable ",
+  data_table_file
+)
+status <- system(cmd)
+fs::file_move("Intercept_ridge.png", glue("models/", model_name, "_", "intercept_ridge.png"))
+
+# 2) read results back into R
+# res <- read.delim("specparam_exponent_rba.txt", comment.char = "#")
+# head(res)
+```
+
+
+```{r}
+e <- new.env()
+load(here::here(glue("notebooks/models/{model_name}.RData")), envir = e)
+
+ls(e) # see what's inside
+spectral_offset_sigma <- e$fm # pull just the object(s) you want
+# model <- e$model
+# 1. Extract S effects for each ROI
+# Note: In your model, S is a factor with levels "prestim" and "stim"
+# The parameter name will be "Sstim" (contrast against baseline)
+
+
+# Extract ONLY the Intercept effects (the only population-level effect in your model)
+intercept_effects <- extract_region_effects(
+  fit = spectral_offset_sigma,
+  region_var = "ROI", # Use "ROI" (capital) - RBA default
+  parameter = "Intercept",
+  digits = 4
+)
+
+# Create results dataframe
+results_df <- data.frame(
+  roi = rownames(intercept_effects),
+  mean_effect = intercept_effects$mean,
+  sd = intercept_effects$SD,
+  p_plus = intercept_effects$`P+`,
+  lower95 = intercept_effects$`2.5%`,
+  upper95 = intercept_effects$`97.5%`
+) %>%
+  mutate(
+    significant = (lower95 > 0) | (upper95 < 0),
+    effect_direction = case_when(
+      mean_effect > 0 ~ "increase",
+      mean_effect < 0 ~ "decrease",
+      TRUE ~ "no_change"
+    )
+  )
+
+head(results_df) %>%
+  mutate(roi = case_when(
+    roi == "lh_Medial_wall" ~ "lh_medial_wall",
+    roi == "rh_Medial_wall" ~ "rh_medial_wall",
+    TRUE ~ roi
+  ))
+
+
+# Don't strip the hemisphere prefix - keep the original ROI names!
+viz_df <- results_df %>%
+  dplyr::rename(label = roi) %>% # atlas expects 'label', not 'region'
+  dplyr::select(label, mean_effect)
+
+# Now the plot should work
+p_mean_all <- my_brain_plot(
+  df = viz_df,
+  atlas_df = desterieux,
+  parameter = mean_effect,
+  filltype = "Blues",
+  legend = TRUE
+) +
+  ggtitle("Exponent across the scalp")
+
+p_mean_all
+```
+Does the ASSR stimulation increase exponent?
+
+## Offset
+
+```{r}
+# assumes you already have: itpc_wide with columns: subject, roi, prestim, stim
+offset_rba_diff <- specparam_avg %>%
+  transmute(
+    Subj = subject,
+    ROI  = roi,
+    Y    = (offset_prestim + offset_stim) / 2
+  ) %>%
+  tidyr::drop_na(Y)
+
+offset_data_file <- "specparam_rba_offset.tsv"
+
+write.table(
+  offset_rba_diff,
+  file = offset_data_file,
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE, na = "NA"
+)
+
+
+
+read.delim(offset_data_file) %>% dplyr::glimpse()
+```
+
+```{r}
+# 0) sanity checks
+model_name <- "specparam_rba_offset"
+data_table_file <- glue("{model_name}.tsv")
+stopifnot(file.exists(data_table_file)) # Subj ROI Y
+system("RBA -help | head -n 5") # confirm it's on PATH
+
+
+# 1) run RBA (blocking; prints to the notebook)
+cmd <- paste(
+  "RBA",
+  glue("-prefix models/{model_name}"),
+  "-chains 4",
+  "-iterations 5000",
+  "-model 1",
+  "-EOI 'Intercept'",
+  " -ridgePlot 10 8 ",
+  "-distY 'normal'", # robust if your Y has outliers
+  "-dataTable ",
+  data_table_file
+)
+status <- system(cmd)
+src <- "Intercept_ridge.png"
+if (fs::file_exists(src)) {
+  fs::file_move(src, glue("models/", model_name, "_", "intercept_ridge.png"))
+} else {
+  warning(glue("Source missing: {src}. Nothing moved."))
+}
+
 ```
 ```{r}
+e <- new.env()
+load(here::here(glue("notebooks/models/{model_name}.RData")), envir = e)
+
+ls(e) # see what's inside
+spectral_offset_sigma <- e$fm # pull just the object(s) you want
+# model <- e$model
+# 1. Extract S effects for each ROI
+# Note: In your model, S is a factor with levels "prestim" and "stim"
+# The parameter name will be "Sstim" (contrast against baseline)
+
+
+# Extract ONLY the Intercept effects (the only population-level effect in your model)
+intercept_effects <- extract_region_effects(
+  fit = spectral_offset_sigma,
+  region_var = "ROI", # Use "ROI" (capital) - RBA default
+  parameter = "Intercept",
+  digits = 4
+)
+
+# Create results dataframe
+results_df <- data.frame(
+  roi = rownames(intercept_effects),
+  mean_effect = intercept_effects$mean,
+  sd = intercept_effects$SD,
+  p_plus = intercept_effects$`P+`,
+  lower95 = intercept_effects$`2.5%`,
+  upper95 = intercept_effects$`97.5%`
+) %>%
+  mutate(
+    significant = (lower95 > 0) | (upper95 < 0),
+    effect_direction = case_when(
+      mean_effect > 0 ~ "increase",
+      mean_effect < 0 ~ "decrease",
+      TRUE ~ "no_change"
+    )
+  )
+
+head(results_df) %>%
+  mutate(roi = case_when(
+    roi == "lh_Medial_wall" ~ "lh_medial_wall",
+    roi == "rh_Medial_wall" ~ "rh_medial_wall",
+    TRUE ~ roi
+  ))
+
+
+# Don't strip the hemisphere prefix - keep the original ROI names!
+viz_df <- results_df %>%
+  dplyr::rename(label = roi) %>% # atlas expects 'label', not 'region'
+  dplyr::select(label, mean_effect)
+
+# Now the plot should work
+p_mean_all <- my_brain_plot(
+  df = viz_df,
+  atlas_df = desterieux,
+  parameter = mean_effect,
+  filltype = "BuGn",
+  legend = TRUE
+) +
+  ggtitle("Exponent across the scalp")
+
+p_mean_all
+```
+
+
+</document_content>
+</document>
+<document index="18">
+<source>./notebooks/EDA_rba.qmd</source>
+<document_content>
+---
+title: "EDA_rba"
+format: html
+---
+
+```{r}
+#| label: fig-itpc
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of ITPC values and their differences between PRESTIM and STIM soud stimulation condition"
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
 # packages
 library(dplyr)
 library(tidyr)
@@ -3198,6 +4139,8 @@ library(here)
 library(ggplot2)
 library(ggdist)
 library(patchwork)
+library(scales)  # for nice breaks
+library(stringr)
 
 # --- load & tidy ---
 itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) %>%
@@ -3225,36 +4168,6 @@ itpc_wide <- itpc_avg %>%
   drop_na(prestim, stim) %>%
   mutate(diff_itpc = stim - prestim)
 
-# --- plots ---
-# 1) Half-eye for ITPC by condition (no title)
-p_cond <- ggplot(itpc_avg, aes(x = itpc, y = S, fill = S)) +
-  stat_halfeye(point_interval = median_qi,
-               .width = c(0.50, 0.80, 0.95),
-               adjust = 0.7, slab_alpha = 0.6) +
-  scale_x_continuous(limits = c(0, 1)) +
-  labs(x = "ITPC", y = NULL) +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "none",
-        plot.title = element_blank())
-
-# 2) Half-eye for paired differences (stim − prestim), with 0 line (no title)
-p_diff <- ggplot(itpc_wide, aes(x = diff_itpc, y = "stim − prestim")) +
-  stat_halfeye(point_interval = median_qi,
-               .width = c(0.50, 0.80, 0.95),
-               adjust = 0.7, slab_alpha = 0.6, fill = "grey60") +
-  geom_vline(xintercept = 0, linetype = "dashed") +
-  labs(x = "Δ ITPC (stim − prestim)", y = NULL) +
-  theme_minimal(base_size = 12) +
-  theme(plot.title = element_blank())
-
-# combine vertically; no titles/captions
-p_combined <- p_cond / p_diff +
-  plot_layout(heights = c(2, 1))
-
-p_combined
-```
-```{r}
-library(scales)  # for nice breaks
 
 # --- shared x from data ---
 vals_cond <- itpc_avg$itpc
@@ -3296,25 +4209,479 @@ p_diff <- ggplot(itpc_wide, aes(x = diff_itpc, y = "stim − prestim")) +
 p_combined <- p_cond / p_diff + patchwork::plot_layout(heights = c(2, 1))
 p_combined
 ```
+
 ```{r}
-#| echo: false
-#| message: false
-#| warning: false
-#| fig-cap: "Distribution of ITPC values and their differences between PRESTIM and STIM soud stimulation condition"
-#| column: page         # span full page width (HTML)
-#| fig-width: 16        # inches on the graphics device
-#| fig-height: 8        # adjust to keep aspect you like
-#| fig-dpi: 200         # crisper lines when wider
-#| fig-align: center
-# (your plotting code that ends with: p_combined)
-p_combined
+source(here::here("R/utils.R"))
+
+e <- new.env()
+load(here::here("notebooks/itpc_diff_rba.RData"), envir = e) 
+
+ls(e)          # see what's inside
+spectral_offset_sigma <- e$fm     # pull just the object(s) you want
+# model <- e$model
+ #1. Extract S effects for each ROI
+# Note: In your model, S is a factor with levels "prestim" and "stim"
+# The parameter name will be "Sstim" (contrast against baseline)
+
+
+# Extract ONLY the Intercept effects (the only population-level effect in your model)
+intercept_effects <- extract_region_effects(
+  fit = spectral_offset_sigma,
+  region_var = "ROI",  # Use "ROI" (capital) - RBA default
+  parameter = "Intercept",
+  digits = 4
+)
+
+# Create results dataframe
+results_df <- data.frame(
+  roi = rownames(intercept_effects),
+  mean_effect = intercept_effects$mean,
+  sd = intercept_effects$SD,
+  p_plus = intercept_effects$`P+`,
+  lower95 = intercept_effects$`2.5%`,
+  upper95 = intercept_effects$`97.5%`
+) %>%
+  mutate(
+    significant = (lower95 > 0) | (upper95 < 0),
+    effect_direction = case_when(
+      mean_effect > 0 ~ "increase",
+      mean_effect < 0 ~ "decrease",
+      TRUE ~ "no_change"
+    )
+  )
+
+head(results_df) %>%  
+  mutate(roi = case_when(
+    roi == "lh_Medial_wall" ~ "lh_medial_wall",
+    roi == "rh_Medial_wall" ~ "rh_medial_wall",
+    TRUE ~ roi
+  ))
+# "lh_Medial_wall" "rh_Medial_wall"
+```
+
+# Plot ITPC on brain 
+```{r}
+
+## assumes:
+##   results_df$roi   -> ROI names from your results
+##   df <- desterieux$data
+##   df$label         -> region names from the atlas/data
+
+
+
+df <- desterieux$data
+# 1) Pull the unique values (drop NAs)
+roi      <- results_df$roi %>% na.omit() %>% unique()
+regions  <- df$label           %>% na.omit() %>% unique()
+
+cat("Counts (unique, non-NA):\n")
+cat("  results_df$roi :", length(roi), "\n")
+cat("  df$label       :", length(regions), "\n\n")
+
+# 2) STRICT equality (exact strings, order ignored)
+strict_equal <- setequal(roi, regions)
+cat("Strict set equality (exact match):", strict_equal, "\n")
+
+if (!strict_equal) {
+  only_in_roi     <- setdiff(roi, regions)
+  only_in_regions <- setdiff(regions, roi)
+
+  cat("\nIn results_df$roi but NOT in df$label:\n")
+  print(sort(only_in_roi))
+
+  cat("\nIn df$label but NOT in results_df$roi:\n")
+  print(sort(only_in_regions))
+}
+
+# 3) Row-wise coverage: are all result rows mappable to a region?
+all_rows_have_match <- all(results_df$roi %in% df$label)
+cat("\nAll rows in results_df$roi exist in df$label (strict):", all_rows_have_match, "\n")
+
+if (!all_rows_have_match) {
+  cat("\nProblem ROIs with counts (strict):\n")
+  print(sort(table(results_df$roi[!(results_df$roi %in% df$label)]), decreasing = TRUE))
+}
+
+# 4) NORMALIZED comparison (trim + lowercase + collapse internal whitespace)
+normalize <- function(x) {
+  x %>%
+    str_squish() %>%     # collapse internal whitespace
+    str_trim() %>%       # trim edges
+    str_to_lower()       # lowercase
+}
+
+roi_norm     <- normalize(roi)
+regions_norm <- normalize(regions)
+
+norm_equal <- setequal(roi_norm, regions_norm)
+cat("\nNormalized set equality (case/space-insensitive):", norm_equal, "\n")
+
+if (!norm_equal) {
+  cat("\n(Normalized) In ROI but not in regions:\n")
+  print(sort(setdiff(roi_norm, regions_norm)))
+  cat("\n(Normalized) In regions but not in ROI:\n")
+  print(sort(setdiff(regions_norm, roi_norm)))
+}
+
 ```
 
 
 
+```{r}
+
+# Filter for  ROIs having a strong evidence of offect
+significant_rois <- results_df %>%
+  dplyr::filter(p_plus > 0.975 | p_plus < 0.025) %>%  # Changed from s_effect_pplus
+  arrange(desc(abs(mean_effect)))  # Changed from s_effect
+
+print("Number of ROIs with significant effect:")
+print(nrow(significant_rois))
+
+print("\nTop 10 ROIs by absolute effect size:")
+print(head(significant_rois, 10))
+
+# Don't strip the hemisphere prefix - keep the original ROI names!
+viz_df <- results_df %>%
+  rename(label = roi) %>%  # atlas expects 'label', not 'region'
+  select(label, mean_effect, p_plus, sd, lower95, upper95, significant)
+
+# Now the plot should work
+p_mean_all <- my_brain_plot(
+  df = viz_df,
+  atlas_df = desterieux,
+  parameter = mean_effect,
+  filltype = "RdBu",
+  legend = TRUE,
+  limits = c(-0.32, 0.32)
+) +
+  ggtitle("ITPC Difference Effect (stim - prestim)\n(All ROIs)")
+
+p_mean_all
+```
+```{r}
+max(viz_df$mean_effect)
+```
+
+
+</document_content>
+</document>
+<document index="19">
+<source>./notebooks/RBA.qmd</source>
+<document_content>
+---
+title: "RBA"
+format: html
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(glue)
+library(here)
+library(conflicted)
+
+source(here::here("R/utils.R"))
+source(here::here("R/utils_viz.R"))
+
+# Helper function for computing differences
+compute_differences <- function(data, metrics) {
+  # First, aggregate
+  agg_data <- data %>%
+    group_by(subject, roi, P, T, S) %>%
+    summarise(across(all_of(metrics), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
+
+  # Pivot wider - this creates columns like metric_prestim, metric_stim
+  wide_data <- agg_data %>%
+    pivot_wider(
+      names_from = S,
+      values_from = all_of(metrics),
+      names_glue = "{.value}_{S}" # Explicit naming
+    )
+
+  # Debug: print column names to see what we actually have
+  cat("Columns after pivot_wider:", paste(names(wide_data), collapse = ", "), "\n")
+
+  # Compute differences for each metric
+  for (metric in metrics) {
+    stim_col <- paste0(metric, "_stim")
+    prestim_col <- paste0(metric, "_prestim")
+    diff_col <- paste0(metric, "_diff")
+
+    # Check if columns exist
+    if (stim_col %in% names(wide_data) && prestim_col %in% names(wide_data)) {
+      wide_data[[diff_col]] <- wide_data[[stim_col]] - wide_data[[prestim_col]]
+    } else {
+      warning(glue("Missing columns for {metric}: looking for {stim_col} and {prestim_col}"))
+      cat("Available columns:", paste(names(wide_data), collapse = ", "), "\n")
+    }
+  }
+
+  wide_data
+}
+```
+
+```{r}
+# ============================================================================
+# COMPUTE DIFFERENCES (WITHIN-SUBJECT)
+# ============================================================================
+
+# Load ITPC data
+itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) %>%
+  dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) %>%
+  mutate(
+    S = case_when(
+      type == "prestim_itpc" ~ "prestim",
+      type == "stim_itpc" ~ "stim",
+      TRUE ~ type
+    ),
+    itpc = value
+  ) %>%
+  select(subject, roi, P, T, S, itpc) %>%
+  distinct()
+
+
+itpc_diff <- compute_differences(itpc, "itpc")
+# ============================================================================
+# VISUALIZATION
+# ============================================================================
+
+
+p_itpc <- plot_condition_comparison(
+  data = itpc_diff,
+  metric = "itpc",
+  metric_label = "ITPC"
+)
+p_itpc
+
+
+```
+
+```{r}
+
+
+# ============================================================================
+# COMPUTE DIFFERENCES (WITHIN-SUBJECT)
+# ============================================================================
+# Load specparam data
+specparam <- readr::read_csv(here::here("data/specparam_all.csv")) %>%
+  mutate(S = condition) %>%
+  select(subject, roi, P, T, S, exponent, error, offset) %>%
+  distinct()
+
+specparam_diff <- compute_differences(specparam, c("exponent", "offset"))
+
+# ============================================================================
+# VISUALIZATION
+# ============================================================================
+
+
+p_exponent <- plot_condition_comparison(
+  data = specparam_diff,
+  metric = "exponent",
+  metric_label = "Aperiodic Exponent"
+)
+p_exponent
+p_offset <- plot_condition_comparison(
+  data = specparam_diff,
+  metric = "offset",
+  metric_label = "Spectral Offset"
+)
+p_offset
+```
+
+```{r}
+
+here::i_am("notebooks/Rba.qmd")  # Relative to project root
+# Use project root for shared outputs
+rba_base <- here::here("notebook")
+
+itpc_config <- list(
+  name = "itpc",
+  data = itpc_diff,
+  metric = "itpc_diff",
+  dist_y = "student",
+  plot_title = "ITPC Difference Effect (stim - prestim)",
+  filltype = "RdBu",
+  limits = c(-0.35, 0.35),
+  significance_threshold = 0.975,
+  rba_base <- here::here("notebooks")
+
+)
+
+run_rba <- function(cfg, atlas_df = desterieux) {
+   results <- with(cfg, {
+    rba_data <- prepare_rba_data(data, metric)
+    model_name <- glue("{name}_rba")
+    cat(glue("\n=== Running RBA for {name} ===\n"))
+    run_rba_model(data = rba_data, 
+                  model_name = model_name, 
+                  dist_y = dist_y,
+                  base_dir = rba_base)
+
+    # assume this returns a list that includes $brain_plot
+    extract_and_plot_rba(
+      model_name = model_name,
+      atlas_df = atlas_df,
+      plot_title = plot_title,
+      filltype = filltype,
+      limits = limits,
+      significance_threshold = significance_threshold,
+      base_dir = rba_base
+    )
+
+    # return all you care about
+   # list(model_name = model_name, fit = fit, plots = plots)
+  })
+}
+
+itpc_rba <- run_rba(itpc_config )
+itpc_rba$brain_plot
+```
+
+
+
+
+
+
+```{r}
+# ============================================================================
+# RBA ANALYSIS - UNIFIED WORKFLOW
+# ============================================================================
+
+# Average across P×T combinations
+specparam_avg <- specparam_diff %>%
+  group_by(subject, roi) %>%
+  summarise(across(starts_with(c("exponent", "offset")), mean, na.rm = TRUE), .groups = "drop")
+
+# Define models to run
+models_config <- list(
+  exponent = list(
+    data = specparam_avg,
+    metric = "exponent",
+    dist_y = "normal",
+    plot_title = "Exponent Difference (stim - prestim)",
+    filltype = "Blues",
+    limits = NULL
+  ),
+  offset = list(
+    data = specparam_avg,
+    metric = "offset",
+    dist_y = "normal",
+    plot_title = "Offset Difference (stim - prestim)",
+    filltype = "BuGn",
+    limits = NULL
+  )
+)
+
+# Run all models
+results <- lapply(names(models_config), function(name) {
+  config <- models_config[[name]]
+  model_name <- glue("{metric}_rba")
+
+  # Prepare data
+  rba_data <- prepare_rba_data(config$data, config$metric)
+
+  # Run model
+  cat(glue("\n=== Running RBA for {metric} ===\n"))
+  run_rba_model(
+    data = rba_data,
+    model_name = model_name,
+    dist_y = config$dist_y
+  )
+
+  # Extract and visualize
+  extract_and_plot_rba(
+    model_name = model_name,
+    atlas_df = desterieux,
+    plot_title = config$plot_title,
+    filltype = config$filltype,
+    limits = config$limits
+  )
+})
+
+# Name the results list
+names(results) <- names(models_config)
+
+# ============================================================================
+# DISPLAY RESULTS
+# ============================================================================
+
+# Print summary for each model
+for (name in names(results)) {
+  cat(glue("\n=== {toupper(name)} Results ===\n"))
+  cat(glue("Significant ROIs: {nrow(results[[name]]$significant_rois)}\n\n"))
+  print(head(results[[name]]$significant_rois, 10))
+  print(results[[name]]$brain_plot)
+}
+```
+
+</document_content>
+</document>
+<document index="20">
+<source>./notebooks/TEST_RBA.qmd</source>
+<document_content>
+---
+title: "TEST_RBA"
+format: typst-pdf
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggdist)  
+itpc <- readr::read_csv(here::here("data/Destrieux_final_itpc.csv")) |>
+  dplyr::filter(type %in% c("prestim_itpc", "stim_itpc")) |>
+  dplyr::mutate(
+    S = dplyr::case_when(
+      type == "prestim_itpc" ~ "prestim",
+      type == "stim_itpc" ~ "stim",
+      TRUE ~ type
+    ),
+    itpc = value
+  ) |>
+  dplyr::select(subject, roi, P, T, S, itpc) |>
+  dplyr::distinct() #|>
+#  dplyr::filter(P == "pre")
+
+head(itpc)
+
+p_halfeye <- ggplot(itpc, aes(y = S, x = itpc, fill = S)) +
+  stat_halfeye(point_interval = median_qi,
+               .width = c(0.50, 0.80, 0.95),
+               adjust = 0.7, slab_alpha = 0.6) +
+  scale_x_continuous(limits = c(0, 1)) +
+  labs(title = "Half-eye: distribution and quantile intervals", x = "ITPC", y = NULL) +
+  theme(legend.position = "none")
+p_halfeye 
+```
 I have decided to average condition to get 1 observation per subject, below I am preparing data to be used in the RBA
 
+```{r}
+library(dplyr)
+library(tidyr)
 
+# (Optional but safe) collapse duplicates first
+itpc_avg <- itpc %>%
+  group_by(subject, roi, S) %>%
+  summarise(itpc = mean(itpc, na.rm = TRUE), .groups = "drop")
+
+# Wide format: one row per subject × roi × T
+itpc_wide <- itpc_avg %>%
+  mutate(S = factor(S, levels = c("prestim", "stim"))) %>%  # ensure column order
+  pivot_wider(
+    names_from  = S,
+    values_from = itpc
+  ) %>%
+  # compute differences
+  mutate(
+    diff_itpc = stim - prestim,                      # absolute difference
+  )
+
+# If you want to drop rows missing either condition:
+itpc_wide <- itpc_wide %>% tidyr::drop_na(prestim, stim)
+
+itpc_wide %>% glimpse()
+```
 ```{r}
 library(dplyr)
 library(tidyr)

@@ -60,6 +60,21 @@ To examine potential differences in inter-trial phase coherence (ITPC) across ex
 
 
 ```{r}
+#source(here::here("targets", "targets_visualizations.R"))
+
+has_store <- dir.exists(here::here("_targets"))
+
+if (has_store) {
+  store <- here::here("_targets")
+model_pt_stim <- targets::tar_read(model_pt_stim,        store = store)
+
+} else {
+  # Rendered by hand: use absolute, project-rooted paths
+  print("Targets need to be run")}
+```
+
+
+```{r}
 #| echo: false
 #| results: hide
 
@@ -76,7 +91,6 @@ library(conflicted)
 source(here::here("R/utils.R"))
 source(here::here("R/utils_viz.R"))
 
-source(here::here("targets", "targets_visualizations.R"))
 
 # Check if functions exist:
 exists("create_brain_plot")
@@ -84,15 +98,6 @@ exists("extract_region_effects")
 exists("my_brain_plot")
 
 
-has_store <- dir.exists(here::here("_targets"))
-
-if (has_store) {
-  store <- here::here("_targets")
-model_pt_stim <- targets::tar_read(model_pt_stim,        store = store)
-
-} else {
-  # Rendered by hand: use absolute, project-rooted paths
-  print("Targets need to be run")}
 
 
 # Helper function for computing differences
@@ -295,6 +300,39 @@ p_exponent
 
 ```
 
+
+```{r}
+#| label: fig-brain-exponent
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of the exponent "
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+#| results: 'hide'
+#|
+exponent_config = list(
+  name = "exponent",
+  data = specparam_diff,
+  metric = "exponent_stim",
+  dist_y = "normal",
+  plot_title = "Exponent",
+  filltype = "Blues",
+  limits = NULL,
+    rba_base <- here::here("notebooks"),
+    significance_threshold = NULL  # Add this
+
+
+)
+
+exponent_rba <- run_rba(exponent_config  )
+exponent_rba$brain_plot
+```
+
+
 ## Offset
 
 ```{r}
@@ -304,6 +342,39 @@ p_offset <- plot_condition_comparison(
   metric_label = "Spectral Offset"
 )
 p_offset
+```
+
+
+
+```{r}
+#| label: fig-brain-offset
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Distribution of the exponent "
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+#| results: 'hide'
+#|
+exponent_config = list(
+  name = "offset",
+  data = specparam_diff,
+  metric = "offset_stim",
+  dist_y = "normal",
+  plot_title = "Exponent",
+  filltype = "BuGn",
+  limits = NULL,
+    rba_base <- here::here("notebooks"),
+    significance_threshold = NULL  # Add this
+
+
+)
+
+exponent_rba <- run_rba(exponent_config  )
+exponent_rba$brain_plot
 ```
 
 

@@ -106,7 +106,7 @@ run_rba_model <- function(
 #' @param plot_title Character: title for brain plot
 #' @param filltype Character: color palette for brain plot
 #' @param limits Numeric vector: color scale limits (optional)
-#' @param significance_threshold Numeric: P+ threshold for significance (default: 0.975)
+#' @param significance_threshold Numeric: P+ threshold for significance (default: NULL)
 #' @return List with: results_df, significant_rois, brain_plot
 extract_and_plot_rba <- function(
     model_name,
@@ -116,7 +116,7 @@ extract_and_plot_rba <- function(
     plot_title = NULL,
     filltype = "RdBu",
     limits = NULL,
-    significance_threshold = 0.975
+    significance_threshold = NULL
 ) {
   # Construct full path
   full_output_dir <- file.path(base_dir, output_dir)
@@ -149,19 +149,26 @@ extract_and_plot_rba <- function(
     upper95 = intercept_effects$`97.5%`
   )
   
-  # Filter significant ROIs
-  significant_rois <- results_df %>%
-    dplyr::filter(
-      p_plus > significance_threshold | 
-        p_plus < (1 - significance_threshold)
-    ) %>%
-    arrange(desc(abs(mean_effect)))
+  # Filter significant ROIs - CORRECTED CODE
+  if (!is.null(significance_threshold)) {
+    selected_rois <- results_df %>% 
+      dplyr::filter(
+        p_plus > significance_threshold | 
+          p_plus < (1 - significance_threshold)
+      ) %>%
+      arrange(desc(abs(mean_effect)))
+  } else {
+    # If no threshold, return all ROIs sorted by effect size
+    selected_rois <- results_df %>%
+      arrange(desc(abs(mean_effect)))
+  }
+  
   
   # Create brain plot if atlas provided
   brain_plot <- NULL
   if (!is.null(atlas_df)) {
     brain_plot <- my_brain_plot(
-      df = significant_rois,
+      df = selected_rois,
       atlas_df = atlas_df,
       parameter = mean_effect,
       filltype = filltype,
