@@ -1,7 +1,8 @@
 ---
 title: "ITPC ~ exponent: a minimal hierarchical BRMS example"
+
 format:
-    html: 
+  html: 
        embed-resources: true
        toc: true
        toc-location: left     # left | right | body
@@ -93,7 +94,7 @@ source(here::here("R/utils_viz.R"))
 
 
 # Check if functions exist:
-exists("create_brain_plot")
+#exists("create_brain_plot")
 exists("extract_region_effects") 
 exists("my_brain_plot")
 
@@ -138,31 +139,7 @@ compute_differences <- function(data, metrics) {
 
 
 
-run_rba <- function(cfg, atlas_df = desterieux) {
-   results <- with(cfg, {
-    rba_data <- prepare_rba_data(data, metric)
-    model_name <- glue("{name}_rba")
-    cat(glue("\n=== Running RBA for {name} ===\n"))
-    run_rba_model(data = rba_data, 
-                  model_name = model_name, 
-                  dist_y = dist_y,
-                  base_dir = rba_base)
 
-    # assume this returns a list that includes $brain_plot
-    extract_and_plot_rba(
-      model_name = model_name,
-      atlas_df = atlas_df,
-      plot_title = plot_title,
-      filltype = filltype,
-      limits = limits,
-      significance_threshold = significance_threshold,
-      base_dir = rba_base
-    )
-
-    # return all you care about
-   # list(model_name = model_name, fit = fit, plots = plots)
-  })
-}
 ```
 
 ### ITPC
@@ -215,6 +192,8 @@ p_itpc <- plot_condition_comparison(
 p_itpc
 
 ```
+```{r}
+```
 
 
 
@@ -237,13 +216,15 @@ The difference between ITPC  between STIM and PRESTIM condition is visualised ac
 #| fig-align: center
 #| results: 'hide'
 
+itpc_prepared  <- prepare_rba_data(itpc_diff, "itpc_diff")
+
 here::i_am("vignettes/01_simple_brms.qmd")  # Relative to project root
 # Use project root for shared outputs
 rba_base <- here::here("notebook")
 
 itpc_config <- list(
-  name = "itpc",
-  data = itpc_diff,
+  rba_data = itpc_prepared,
+  model_name <- "itpc_diff",
   metric = "itpc_diff",
   dist_y = "student",
   plot_title = "ITPC Difference Effect (stim - prestim)",
@@ -269,12 +250,17 @@ Before we were collapsed data we wanted to check the differences using RBA
 
 Figures 
 ```{r}
-#| label: fig-brain-exponent
+#| label: fig-dist-exponent
 #| echo: false
 #| message: false
 #| warning: false
 #| fig-cap: "Distribution of the evoked changed in ITPC by sound stimulation (STIM vs PRESTIM) after filtering out the regions wtih P+ "
-
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+#| results: "hide" 
 # ============================================================================
 # COMPUTE DIFFERENCES (WITHIN-SUBJECT)
 # ============================================================================
@@ -314,9 +300,13 @@ p_exponent
 #| fig-align: center
 #| results: 'hide'
 #|
+
+
+exponent_prepared  <- prepare_rba_data(specparam_diff, "exponent_stim")
+
 exponent_config = list(
-  name = "exponent",
-  data = specparam_diff,
+  rba_data = exponent_prepared  ,
+    model_name <- "exponent_stim",
   metric = "exponent_stim",
   dist_y = "normal",
   plot_title = "Exponent",
@@ -327,7 +317,6 @@ exponent_config = list(
 
 
 )
-
 exponent_rba <- run_rba(exponent_config  )
 exponent_rba$brain_plot
 ```
@@ -336,6 +325,18 @@ exponent_rba$brain_plot
 ## Offset
 
 ```{r}
+#| label: fig-dist-offset
+#| echo: false
+#| message: false
+#| warning: false
+#| column: page         # span full page width (HTML)
+#| fig-width: 16        # inches on the graphics device
+#| fig-height: 8        # adjust to keep aspect you like
+#| fig-dpi: 200         # crisper lines when wider
+#| fig-align: center
+#| results: "hide" 
+
+
 p_offset <- plot_condition_comparison(
   data = specparam_diff,
   metric = "offset",
@@ -360,6 +361,8 @@ p_offset
 #| results: 'hide'
 #|
 exponent_config = list(
+    rba_data = specparam_diff ,
+
   name = "offset",
   data = specparam_diff,
   metric = "offset_stim",
@@ -372,7 +375,22 @@ exponent_config = list(
 
 
 )
+offset_prepared  <- prepare_rba_data(specparam_diff, "offset_stim")
 
+exponent_config = list(
+  rba_data = offset_prepared   ,
+    model_name <- "offset_stim",
+
+  metric = "offset_stim",
+  dist_y = "normal",
+  plot_title = "Offset",
+  filltype = "Purples",
+  limits = NULL,
+    rba_base <- here::here("notebooks"),
+    significance_threshold = NULL  # Add this
+
+
+)
 exponent_rba <- run_rba(exponent_config  )
 exponent_rba$brain_plot
 ```
@@ -471,33 +489,7 @@ For hypothesis testing, we examined the posterior distributions of the regressio
 
 # Results
 
-```{r}
-# Check all tDCS parameters for significant effects
-parameters <- c("Ppost", "Treal", "Ppost:Treal")
-parameter_names <- c("Time effect (post vs pre in sham)", 
-                    "Treatment effect (real vs sham at pre)", 
-                    "tDCS × Time interaction")
 
-for(i in 1:length(parameters)) {
-  roi_effects <- extract_region_effects(model_pt_stim, parameter = parameters[i])
-  n_significant <- sum(roi_effects$`P+` > 0.95 | roi_effects$`P+` < 0.05)
-  
-  cat(parameter_names[i], ": ", n_significant, " regions with P+ > 0.95 or P+ < 0.05\n")
-}
-
-cat("\nConclusion: Insufficient evidence for tDCS effects if all counts are 0")
-
-# Visualize region-specific P×T interaction effects
-interaction_plot <- create_brain_plot(
-  fit = model_pt_stim,
-  parameter = "Ppost:Treal",  # This is the P×T interaction term
-  filltype = "RdBu",  # Red-blue diverging palette centered at zero
-  filter_significant = TRUE,  # Only show regions with strong evidence
-  title = "tDCS × Time Interaction Effects on ITPC",
-  filename = "itpc_interaction_effects",
-  width = 12, height = 8
-)
-```
 We found insufficient evidence for tDCS × time interaction effects on ITPC (no regions with P+ > 0.95), suggesting that tDCS effects do not significantly modify ITPC across our experimental conditions. Therefore, we combined data across conditions to examine the relationship between ITPC and spectral exponent."
 
 

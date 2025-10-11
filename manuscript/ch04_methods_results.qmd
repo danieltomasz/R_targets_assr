@@ -1,0 +1,219 @@
+
+### Current study
+
+This study investigates the relationship between the aperiodic spectral exponent and local gamma phase-locking as measured by ITPC during 40-Hz ASSR in healthy participants. We analyzed MEG data from 15 participants during auditory stimulation.
+
+Our analytical strategy utilizes Bayesian multilevel modeling to examine how spectral slope might be related to  ITPC  measured across brain regions while appropriately handling the multiple comparisons inherent in whole-brain analysis. This approach allows us to take into account region-specific effects while borrowing strength across regions through partial pooling, providing more robust and interpretable results than traditional mass-univariate approaches.
+
+Understanding the relationship between these two putative biomarkers of local neural circuit function has important implications for their use in clinical and research contexts. If they reflect shared biological mechanisms, their combined examination may provide more sensitive and specific markers of local circuit integrity than either measure alone.
+
+Definitive testing of biological relationship is not easy, hovever, we can partilly test methodological confound hypothesis with simulations of signals with verying  paramenters. The slope-ITPC relationship may partially reflect methodological interdependencies in phase estimation, where steeper slopes (indicating stronger high-frequency attenuation) systematically bias ITPC measurements toward lower values by reducing the signal-to-noise ratio of oscillatory components relative to aperiodic background.
+
+### Participants and experimental design
+
+This study analyzed a magnetoencephalography (MEG) dataset previously described by @pellegrino2019TranscranialDirectCurrent. The experimental procedures were approved by the Ethics Committee of the Province of Venice, and all participants provided written informed consent before participation.
+
+Fifteen healthy, right-handed volunteers participated (12 females, 3 males; mean age = 28.8 ± 3 years, age range: 20-50 years). Participants were screened using the following exclusion criteria: (1) hearing impairment, (2) current use of medications affecting the central nervous system, (3) history of neuropsychiatric disorders, and (4) any other medical condition that might affect brain function.
+
+The experiment used a within-subjects design to investigate cortical gamma-band synchronization in response to 40 Hz amplitude-modulated auditory stimuli. As shown in @fig-factors, the protocol comprised two  different sessions of bi-hemispheric tDCS stimulation (sham and real) conducted at least 20 hours apart indicated by condition (T): REAL or SHAM. The order of the tDCS stimulation (sham and  real) was counterbalanced across subjects. Stimulation was applied to the left and right pericentral regions [@fig-factors] using standard protocols. The anode was positioned over the left hemisphere and the cathode over the right hemisphere, targeting auditory cortical regions. Real  stimulation lasted 20 min with 20 s of fade-in and fade-out.  Sham stimulation was performed with the same settings, but electrical  current was delivered only for 20 s at the beginning and at the end of  the tDCS session.
+
+::: {#fig-factors}
+
+![](figures/chapter4/ch04-1-factors.png){ fig-scap='Experimental design'}
+
+Design of the orginal experiment. Source: [@pellegrino2019TranscranialDirectCurrent]
+:::
+
+Each session included two blocks corresponding to conditions related to the time (P) of applying tDCS stimulation: PRE (before tDCS) and POST (after tDCS). @fig-sound2 shows the structure of a paradigm used to induce 40 Hz synchrony during a single block. Each block consisted of 180 repetitions lasting 2 s each. Each trial included 1 s of pause (S=PRESTIM condition) followed by a 40 Hz amplitude-modulated (AM) tone (S=STIM condition), so that the stimulus onset asynchrony was 2 s. Each block lasted a total of 6 minutes (180 trials × 2 seconds).
+@fig-sound1 illustrates the auditory stimulus, an amplitude modulated tone with the following parameters: carrier frequency = 1,000 Hz and amplitude modulating frequency = 40 Hz. 
+
+::: {#fig-signal layout-ncol=2}
+
+
+![Structure of the trial.](figures/chapter4/experimental_protocol_sound2.png){#fig-sound2}
+
+
+![ Carrier and amplitude modulation.](figures/chapter4/experimental_protocol_sound1.png){#fig-sound1}
+
+
+Structure of auditory stimulation. Adapted from @pellegrino2019TranscranialDirectCurrent.
+
+:::
+
+
+<!--  Although the current analysis focuses exclusively on pre-TDCS stimulation data, it is important to note the overall experimental context.
+
+This factorial design resulted in four key measurement blocks per participant: PRE-REAL, POST-REAL, PRE-SHAM, and POST-SHAM. However, for the present analysis focusing on baseline cortical gamma synchronization, only the PRE-REAL and PRE-SHAM conditions were analyzed—capturing neural responses prior to any neuromodulatory intervention. -->
+
+### MEG Data acquisition and preprocessing
+
+MEG scans were performed at the MEGLab of the IRCCS San Camillo Hospital in Venice in a shielded room with a CTF-MEG system equipped with 275 gradiometers.
+As outlined in [@pellegrino2019TranscranialDirectCurrent] MEG data preprocessing included: third-order spatial gradient noise cancellation, downsampling to 600 Hz, signal space-separation. Heartbeat and eye-movement artefacts were cleaned with the SSP approach. MEG data was cut in 3 s epochs ranging from −1.5 s to +1.5 s around the 40 Hz sound onset. Epochs were visually inspected and those affected by artefacts were manually rejected. The available MRI scans were segmented and processed through Freesurfer software. The surface was divided into 15,000 vertices imported into Brainstorm toolbox and downsampled into 8.000 vertices. The coregistration between functional MEG data and anatomical MRI data was performed via the Brainstorm toolbox.
+
+Data was bandpass filtered betweeen 2 and 80 Hz and then notch filtered for 50\~Hz. The inverse problem for source estimation was solved with the whitened and depth-weighted linear L2-minimum norm estimate, with the dipole orientation constrained to be normal to the cortical surface. A common imaging kernel was computed and then applied to obtain single epoch cortical reconstructions. Data was projected into regions using @destrieux2010AutomaticParcellationHuman atlas and exported from Brainstorm into MNE Python.
+
+<!-- // TODO: check if this is correct -->
+
+<!-- The data were z-scored per epoch and split into shorter 1s epochs to analyse separately PRESTIM (-1s to 0s before start of sound stimulation) and STIM (0s, 1s) containing the interval of the stimulation. -->
+
+
+
+
+
+#### PSD and Aperiodic Parametrization
+
+For every trial, the 1s second fragment before sound stimulation and 1s  fragment during  the sound stimulation was extracted. For those  intervals power spectral density was computed using MNE Python using `welch` method and the median was taken across trials  in a block (as is more roboust than just averaging). Then the slope and exponent of the spectrum were computed for each region of interest using `specparam` toolbox [@donoghue2020ParameterizingNeuralPower]. 
+
+In the algorithm the power spectrum PSD is modeled as a combination of the aperiodic component AP and a sum of N oscillatory peaks modeled as a Gaussians:
+
+$$ 
+P = A P + \sum_{n=0}^N G_n. 
+$$
+
+The component $AP(f)$ for frequency $f$ can expressed by the formula:
+
+$$
+A P(f) = b - \log(k + f^\chi)
+$$
+
+where $b$ is the broadband offset, $chi$ is the exponent and $k$ is the knee parameter. The  exponent $\chi$ is related to the negative slope  of the power spectrum in log-log space, that is,  the inverse relationship between power and frequency; The offset b describe the uniform shift  in power across frequencies.
+The frequency range on which the algorithm was fitted span interval [3, 45]. The parameters with which data were analysed are the following hyperparameters : `peak_width_limits` =\[1, 8\], `min_peak_height`=0.15, `peak_threshold`=2.0.  
+
+<!--  The outputs of the algorithm for estimated peaks are the mean of the Gaussian $G_n$ for the center frequency of the peak, aperiodic-adjusted power (the distance between the peak of the Gaussian and the aperiodic fit at this frequency) and bandwidth as 2 SD of the fitted Gaussian. 
+
+-->
+
+<!-- # Resting state analysis
+
+ For the resting state data the he spectral parameterization was performed using SpectralGroupModel to decompose neural power spectra into periodic and aperiodic components. Peak detection parameters were configured with width limits of 1-6 Hz, minimum peak height of 0.5, peak threshold of 2.0 standard deviations, and maximum 6 peaks per spectrum. These constraints ensure detection of physiologically relevant oscillations while preventing overfitting and false positives.
+The analysis examined frequencies from 2-45 Hz, encompassing delta through low gamma bands while excluding DC components and high-frequency artifacts. This frequency range captures the primary oscillatory dynamics relevant to cognitive and sensory processing. -->
+
+
+###  Estimation of synchrony via inter-trial phase coherence (ITPC)
+
+<!-- A paragraph about neural synchrony here -->
+
+Spectral modulations and phase consistency of ASSR in MEG and EEG data are highly reproducible, providing support for other research [@tan2015MEGmeasuredAuditorySteadystate; @pellegrino2019TranscranialDirectCurrent]. ASSR are usually investigated by looking at the inter-trial phase coherence (ITPC) . The inter-trial phase coherence (ITPC) is defined using the length of the mean phase angle,
+$$
+\text{ITPC} =  \left| \frac{1}{N} \sum_{k=1}^{N} e^{i \cdot \phi_k} \right|,
+$$ 
+where $N$ represents the number of trials, $e^{i\phi_k}$ is complex polar representation the phase angle $\phi$ of the trial $k$. ITPC is an measure of phase consistency over trials, can take values between 0 and 1. The higher is ITPC, the higher is the 40 Hz gamma synchronization
+
+The ITPC was computed for 1s second pre-stimulus period and  1s stimulation period via Time-Frequency Representation (TFR) using Morlet wavelets approach implemented in MNE Python (1.9) in the 39-41 Hz gamma band for each epoch.\
+<!-- with the following parameters: `freqs` = \[39-41\] Hz, `n_cycles` = 20.--> Values of ITPC were extracted in the period of -500ms to - 200ms in the period before sound stimulation starts and 300 ms to 700 ms during the  sound stimulation, counting on the time of brain reaching steady-state (@pellegrino2019TranscranialDirectCurrent) and averaged in those periods.
+
+<!-- We computed the ITPC in all conditions
+We compared the ITPC in the POST and real condition  -->
+
+###  Mapping of value distributions of variables of interest
+
+To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we conducted a Bayesian multilevel analysis using the brms package (Bürkner, 2017) in R ( R version `4.5.1` and brms version `2.22`). 
+ <!-- This preliminary analysis was performed to determine whether conditions could be appropriately combined in subsequent modeling. -->
+
+ First part we used data from the PRE condition
+
+We looked into simple model where and how much  ASSR change ITPC.
+My assumption is that the  effect of  sound  stimulation will be dependent both from the Subject and roi (@barr2013RandomEffectsStructure argues for maximal structure of model being conservative)
+$$  ITPC \sim  1+  S + (1+ S|ROI) + (1 + S|Subject)$$
+
+Similarly we do use similar structure for parameters of the slope - exponent and offset
+
+$$ exponent \sim 1 + S  + (1 + S|ROI) + (1 + S|Subject)$$
+
+$$ offset \sim 1 + S  + (1 + S|ROI) + (1 + S|Subject)$$
+
+We decided to fit sigma  in the models as well to capture the uncertainty more precisely -  Different subjects may not only differ in their mean responses but also in their consistency and ifferent ROIs might have different signal-to-noise ratios.
+
+#### Main Analysis
+
+A hierarchical Bayesian model was implemented using the brms package to assess the relationship between ITPC and spectral exponent. The model was specified as:
+
+$$
+itpc \sim 1 + exponent_z + (1 + exponent_z | roi) + (1 + exponent_z | subject)
+$$
+This formula represents ITPC as a function of the standardized spectral exponent (exponent_z), while accounting for random intercepts and slopes for both brain regions (roi) and subjects. We employed Student's t-distribution as the likelihood function to accommodate potential outliers in the data. The model was fitted using Markov Chain Monte Carlo sampling with 4 chains, 4000 iterations per chain, and a 1000-iteration warm-up period. To improve convergence, we set the adapt_delta parameter to 0.95.
+
+
+To interpret region-specific effects, we extracted random effects for each ROI using the extract_region_effects function. This allowed us to calculate:
+
+Base ITPC values (intercept) for each brain region
+The effect of spectral exponent on ITPC in each region
+Posterior probabilities (P+) indicating the likelihood of positive effects
+95% credible intervals for parameter estimates
+
+We calculated predicted ITPC values at different levels of the spectral exponent (±1 standard deviation from the mean) to quantify effect sizes across regions. Brain regions were then ranked based on both the magnitude of the spectral exponent effect and the posterior probability of the effect being positive or negative. Results were visualized using brain plots to illustrate the spatial distribution of effects.
+
+
+#### ITPC Comparison Between Experimental Conditions including tDCS
+
+
+<!-- The dataset included ITPC measurements from multiple subjects across different regions of interest (ROIs), with experimental manipulations involving transcranial direct current stimulation (tDCS) and sham conditions, measured at both pre-stimulation and post-stimulation timepoints. Data were collected using the Destrieux atlas parcellation for ROI definition. -->
+
+We constructed a hierarchical Bayesian model with ITPC as the dependent variable. Fixed effects included the main effects of measurement time point (P: pre vs. post), stimulation type (T: tDCS vs. sham), and their interaction (P×T). The model incorporated subject-specific and ROI-specific random intercepts and slopes for all fixed effects, allowing for individual variation in both baseline ITPC values and responses to the experimental manipulations.
+The model specification was:
+
+$$itpc \sim ~  1 + P*T + (1 + P*T | roi) + (1 + P*T | subject)$$
+
+We used a Student's t-distribution as the likelihood function to accommodate potential outliers in the data. The model was fitted using four Markov Chain Monte Carlo (MCMC) chains with 4,000 iterations each (including 1,000 warmup iterations), resulting in 12,000 post-warmup samples for posterior inference. To improve convergence, we set the adapt_delta parameter to 0.95.
+
+For hypothesis testing, we examined the posterior distributions of the regression coefficients, focusing on the main effects of time point and stimulation type, as well as their interaction. We calculated probability values (P+) for each ROI-specific parameter, representing the probability of a positive effect when the mean was positive, or a negative effect when the mean was negative. Effects were considered to show strong evidence when P+ exceeded 0.95 (strong evidence for a positive effect) or fell below 0.05 (strong evidence for a negative effect).
+
+
+# Simulations 
+
+## Descriptive Statistics and Data Quality
+
+Before examining the relationship between spectral exponent and ITPC, we first verified that our experimental manipulations (tDCS stimulation) did not systematically alter ITPC measurements, allowing us to pool data across conditions for our primary analysis
+
+# Results
+
+### ITPC
+
+First we tested if the conditions PRE in real and sham conditions aren't different. No region has P+ values bigger than 0.90 or smaller than 0.10 so we concluded that these condition's aren' different.
+
+Simple visualization of the results ITPC results are presented in the @fig-itpc-mean.
+
+::: {#fig-itpc-mean fig-scap="Z-normalized values of ITPC (for PRE Sham and PRE real conditions)"}
+![](figures/chapter4/ch04-fig2.png)
+
+Z-normalized values of ITPC (for PRE Sham and PRE real conditions)
+:::
+
+The region with the biggest response values were The P+ (Part of posterior distrubution that is bigger than 0 ) is presented in the table
+
+We also computed the map o difference Pre sham/real tDCS effects and then the Real versus Sham stimulation were contrasted (computed the difference) using Bayesian Multilevel Modelling, but no region has P+ suggesting effect of TDCS.
+
+### Specparam parameters
+
+We tested effects of stimulation on exponent and we didnt find any difference.
+By meanigful differnce we count  those  with P+ > 0.975 or  0.025.
+Below we present exponent values as mapped per region
+
+Mean values of parameters describing the 1/f part od spectral power across different regions (right hemisphere).
+
+::: {#fig-spectral-params}
+![](figures/chapter4/ch04-fig3.png)
+
+Mean values of exponent and offset averaged for the trials before tDCS stimulation and before sound stimulation
+:::
+
+### Evidence of Three Explanatory Models for the ITPC
+
+-   The exponent and the offset of the spectrum are different across the brain (Box 1); The parametrization of the slope of the aperiodic component (exponent) might be affected by neural entrainment and increased power in gamma frequency
+-   Strong effect of the stimulus (S) on the ITPC (contrast baseline-stimulus), in areas like the auditory regions, but also in temporal lobe, inferior part of primary sensory-motor regions and inferior frontal regions; negative values indicate higher ITPC during stimulation.
+-   Model with two explanatory variables $$ ITP  \sim {Exponent} +
+    Stimulus $$ has strong evidence in the same regions, both when considering exponent and stimulus as explanatory variables, with the effects having opposite signs, on the same regions.
+-   No particular evidence was found for the model #strong\[Exponent \~ Stimulus\];, namely the stimulation did not influence the exponent per se.
+-   No significant evidence was found for any of the models involving the Offset either as a predicted variable, and as a predictor, suggesting a marginal role for it in the auditory entrainment.
+
+::: {#fig-model-evidence}
+![](figures/chapter4/model_evidence.png)
+
+Positive values indicate stronger modulation at baseline, negative values indicate stronger modulation during stimulation.
+:::
+
+
+## ITPC including tDCS
+
+Additionally, we extracted the ROI-specific coefficients to examine regional variation in the  effects. This allowed us to identify potential regions showing differential responses to the stimulation conditions.
+The preliminary analysis revealed no significant differences in ITPC between pre- and post-stimulation timepoints, nor between tDCS and sham conditions. The interaction between timepoint and stimulation type also showed no significant effect. These findings suggest that ITPC measurements can be appropriately pooled across these conditions in subsequent analyses, as the experimental manipulations did not substantially alter the phase coherence measures.

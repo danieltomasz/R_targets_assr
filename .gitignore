@@ -24,3 +24,4 @@ _archive/
 sandbox/
 notebooks/sandbox/
 **.Rdata
+.RDataTmp

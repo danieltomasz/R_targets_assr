@@ -75,7 +75,7 @@ itpc_rba_long <- itpc_avg %>%
     ROI  = roi,
     Cond,
     Y    = itpc
-  ) %>%
+  ) %>%itpc
   arrange(Subj, ROI, Cond) %>%
   tidyr::drop_na(Y)
 

@@ -5,6 +5,48 @@ library(dplyr)
 library(brms)
 library(here)
 
+# check current PATH and whether RBA is visible
+Sys.getenv("PATH")
+Sys.which("RBA")
+
+# common install locations — add what applies on your machine
+cand <- c(file.path(Sys.getenv("HOME"), "abin"),
+          "/usr/local/bin",
+          "/opt/homebrew/bin",              # Apple Silicon Homebrew
+          "/usr/local/afni/bin",            # generic
+          Sys.getenv("CONDA_PREFIX"))       # if installed via conda
+
+cand <- cand[file.exists(cand)]
+Sys.setenv(PATH = paste(c(cand, Sys.getenv("PATH")), collapse=.Platform$path.sep))
+Sys.which("RBA")   # should now show a path
+
+
+run_rba <- function( cfg, atlas_df = desterieux) {
+  results <- with(cfg, {
+    
+  
+    cat(glue("\n=== Running RBA for {model_name} ===\n"))
+    run_rba_model(data = rba_data, 
+                  model_name = model_name, 
+                  dist_y = dist_y,
+                  base_dir = rba_base)
+    
+    # assume this returns a list that includes $brain_plot
+    extract_and_plot_rba(
+      model_name = model_name,
+      atlas_df = atlas_df,
+      plot_title = plot_title,
+      filltype = filltype,
+      limits = limits,
+      significance_threshold = significance_threshold,
+      base_dir = rba_base
+    )
+    
+    # return all you care about
+    # list(model_name = model_name, fit = fit, plots = plots)
+  })
+}
+
 
 #' Prepare data for RBA analysis by aggregating to subject×roi level
 #'
@@ -13,7 +55,7 @@ library(here)
 #' @param avg_function Function: how to aggregate (default: mean)
 #' @return Data frame with columns: Subj, ROI, Y
 prepare_rba_data <- function(data, metric_col, avg_function = mean) {
-  data %>%
+  rba_data <- data %>%
     group_by(subject, roi) %>%
     summarise(
       value = avg_function(.data[[metric_col]], na.rm = TRUE),
@@ -25,6 +67,7 @@ prepare_rba_data <- function(data, metric_col, avg_function = mean) {
       Y = value
     ) %>%
     tidyr::drop_na(Y)
+  return(rba_data)
 }
 
 #' Run RBA model with standardized settings
@@ -39,7 +82,7 @@ prepare_rba_data <- function(data, metric_col, avg_function = mean) {
 run_rba_model <- function(
     data,
     model_name,
-    base_dir = here::here(),
+    base_dir,
     dist_y = "student",
     data_dir = "data_table",
     output_dir = "models",
@@ -70,7 +113,7 @@ run_rba_model <- function(
   # Construct and run RBA command
   cmd <- paste(
     "RBA",
-    glue::glue("-prefix {output_dir}/{model_name}"),
+    glue::glue("-prefix {full_output_dir}/{model_name}"),
     glue::glue("-chains {chains}"),
     glue::glue("-iterations {iterations}"),
     "-model 1",
@@ -91,7 +134,7 @@ run_rba_model <- function(
   if (file.exists(ridge_file)) {
     fs::file_move(
       ridge_file,
-      glue::glue("{output_dir}/{model_name}_intercept_ridge.png")
+      glue::glue("{full_output_dir}/{model_name}_intercept_ridge.png")
     )
   }
   
@@ -184,7 +227,7 @@ extract_and_plot_rba <- function(
   # Return results
   list(
     results_df = results_df,
-    significant_rois = significant_rois,
+    significant_rois = selected_rois ,
     brain_plot = brain_plot
   )
 }
