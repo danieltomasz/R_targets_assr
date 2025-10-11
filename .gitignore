@@ -25,3 +25,4 @@ sandbox/
 notebooks/sandbox/
 **.Rdata
 .RDataTmp
+_output/

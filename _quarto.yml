@@ -6,6 +6,76 @@ resource-path:
   - .          # project root
   - figures    # image folder under root
 
+reference-section-title: References
+citeproc: true  # ← Change this to false
+
+
+#fontfamily: accanthis
+format:
+  # html:
+  #   page-layout: full
+  #   toc: true
+  #   toc-location: left
+  #   embed-resources: true
+  #   fig-dir: figures
+  #   comments:
+  #     hypothesis: true
+  pdf:
+    link-citations: true
+    number-sections: false
+    pdf-engine: lualatex
+    fontsize: 12pt
+    include-in-header:
+      text: |
+        \usepackage{microtype}
+        \usepackage{epigraph}
+        \usepackage{indentfirst}
+        \setlength{\parindent}{2em}
+        
+        % Math and font configuration
+        \usepackage{unicode-math}  % Better Unicode math support
+        \usepackage{amsmath}      % Enhanced math capabilities
+        \usepackage{mathtools}    % Additional math tools
+        
+        % Font configuration
+        \usepackage{fontspec}     % Required for LuaTeX font handling
+        \setmainfont{TeX Gyre Pagella}[
+          Numbers={OldStyle,Proportional},
+          Scale=1.0
+        ]
+        \setsansfont{Cabin}[
+          Scale=0.95,
+          BoldFont={* Bold},
+        ]
+        \setmonofont{Inconsolata}[
+          Scale=1.0,
+          StylisticSet={1,2}
+        ]
+        \setmathfont{TeX Gyre Pagella Math}  % Matching math font
+        
+        % Figure handling
+        \usepackage{float}
+        \graphicspath{{figures}{chapters/figures}{../figures}{chapters}{..}}
+        \let\origfigure\figure
+        \let\endorigfigure\endfigure
+        \renewenvironment{figure}[1][2] {
+            \expandafter\origfigure\expandafter[H]
+        } {
+            \endorigfigure
+        }
+
+    # include-before-body:
+    #   text: |
+    #     \pagestyle{plain}
+    #     \pagenumbering{roman}
+    # include-after-body:
+    #   text: |
+    #     \printindex
+
+
+
+
+
 execute:
   dir: project  
   

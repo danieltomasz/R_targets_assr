@@ -147,7 +147,7 @@ compute_differences <- function(data, metrics) {
 The distribution is presented in the @fig-itpc.
 
 ```{r}
-#| label: fig-itpc
+#| label: fig-dist-itpc
 #| echo: false
 #| message: false
 #| warning: false
@@ -191,6 +191,14 @@ p_itpc <- plot_condition_comparison(
 )
 p_itpc
 
+# zapisz figurę jako PNG
+ggplot2::ggsave(
+  filename = here::here("manuscript/figures/chapter4", "ch04-fig-dist-itpc.png"),
+  plot = p_itpc,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
 ```
 ```{r}
 ```
@@ -238,6 +246,15 @@ itpc_config <- list(
 itpc_rba <- run_rba(itpc_config )
 itpc_rba$brain_plot
 
+# zapisz figurę jako PNG
+ggplot2::ggsave(
+  filename = here::here("manuscript/figures/chapter4", "ch04-fig-brain-itpc.png"),
+  plot = itpc_rba$brain_plot,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
+
 ```
 
 
@@ -284,6 +301,15 @@ p_exponent <- plot_condition_comparison(
 )
 p_exponent
 
+# zapisz figurę jako PNG
+ggplot2::ggsave(
+  filename = here::here("manuscript/figures/chapter4", "ch04-fig-dist-exponent.png"),
+  plot = p_exponent,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
+
 ```
 
 
@@ -319,6 +345,15 @@ exponent_config = list(
 )
 exponent_rba <- run_rba(exponent_config  )
 exponent_rba$brain_plot
+
+# zapisz figurę jako PNG
+ggplot2::ggsave(
+  filename = here::here("manuscript/figures/chapter4", "ch04-fig-brain-exponent.png"),
+  plot = exponent_rba$brain_plot,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
 ```
 
 
@@ -343,6 +378,16 @@ p_offset <- plot_condition_comparison(
   metric_label = "Spectral Offset"
 )
 p_offset
+
+# zapisz figurę jako PNG
+ggplot2::ggsave(
+  filename = here::here("manuscript/figures/chapter4", "ch04-fig-dist-offset.png"),
+  plot = p_offset,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
+
 ```
 
 
@@ -393,6 +438,14 @@ exponent_config = list(
 )
 exponent_rba <- run_rba(exponent_config  )
 exponent_rba$brain_plot
+# zapisz figurę jako PNG
+ggplot2::ggsave(
+  filename = here::here("manuscript/figures/chapter4", "ch04-fig-brain-offset.png"),
+  plot = exponent_rba$brain_plot,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
 ```
 
 

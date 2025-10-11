@@ -105,7 +105,9 @@ The ITPC was computed for 1s second pre-stimulus period and  1s stimulation peri
 <!-- We computed the ITPC in all conditions
 We compared the ITPC in the POST and real condition  -->
 
-###  Mapping of value distributions of variables of interest
+#  Current study
+
+###  Distribution of variables of interest
 
 To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we conducted a Bayesian multilevel analysis using the brms package (Bürkner, 2017) in R ( R version `4.5.1` and brms version `2.22`). 
  <!-- This preliminary analysis was performed to determine whether conditions could be appropriately combined in subsequent modeling. -->
@@ -167,14 +169,24 @@ Before examining the relationship between spectral exponent and ITPC, we first v
 
 # Results
 
+The distribution of ITPC values and its differences is presented in the @fig-dist-itpc.
+
 ### ITPC
+
+![ The distribution of ITPC values and its differences .](figures/chapter4/ch04-fig-dist-itpc.png){#fig-dist-itpc}
+For both PRESTIM and STIM condition I want to check differences in  other conditions, in order to see if I can collapse conditions, but model  `itpc ~ 1 + P*T + (P*T|roi) + (1|subject)` is too complex and have a convergence issues. Instead I am using RBA ans pairs of simpler models.
+
+When combined all condition together to obtain @fig-brain-itpc.
+
+The difference between ITPC  between STIM and PRESTIM condition is visualised across the scalp in @fig-brain-itpc
+
 
 First we tested if the conditions PRE in real and sham conditions aren't different. No region has P+ values bigger than 0.90 or smaller than 0.10 so we concluded that these condition's aren' different.
 
-Simple visualization of the results ITPC results are presented in the @fig-itpc-mean.
+Simple visualization of the results ITPC results are presented in the @fig-brain-itpc
 
 ::: {#fig-itpc-mean fig-scap="Z-normalized values of ITPC (for PRE Sham and PRE real conditions)"}
-![](figures/chapter4/ch04-fig2.png)
+![](figures/chapter4/ch04-fig-brain-itpc.png){#fig-brain-itpc}
 
 Z-normalized values of ITPC (for PRE Sham and PRE real conditions)
 :::
@@ -185,17 +197,41 @@ We also computed the map o difference Pre sham/real tDCS effects and then the Re
 
 ### Specparam parameters
 
+
+#### Exponent 
+
+![ The distribution of exponent  values and its differences .](figures/chapter4/ch04-fig-dist-exponent.png){#fig-dist-exponent}
+
 We tested effects of stimulation on exponent and we didnt find any difference.
 By meanigful differnce we count  those  with P+ > 0.975 or  0.025.
 Below we present exponent values as mapped per region
 
 Mean values of parameters describing the 1/f part od spectral power across different regions (right hemisphere).
 
-::: {#fig-spectral-params}
-![](figures/chapter4/ch04-fig3.png)
+
+::: {#fig-brain-exponent fig-scap="Values of exponet of the slope "}
+![](figures/chapter4/ch04-fig-brain-exponent.png){#fig-brain-exponent}
+
+Z-normalized values of ITPC (for PRE Sham and PRE real conditions)
+:::
+
+
+#### Offset
+
+![ The distribution of offset values and its differences .](figures/chapter4/ch04-fig-dist-offset.png){#fig-dist-offsett}
+
 
 Mean values of exponent and offset averaged for the trials before tDCS stimulation and before sound stimulation
+
+
+
+
+::: {#fig-brain-offset fig-scap="Values of exponet of the slope "}
+![](figures/chapter4/ch04-fig-brain-offset.png){#fig-brain-offset}
+
+Offset values
 :::
+
 
 ### Evidence of Three Explanatory Models for the ITPC
 
