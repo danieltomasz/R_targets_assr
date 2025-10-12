@@ -160,6 +160,30 @@ We used a Student's t-distribution as the likelihood function to accommodate pot
 
 For hypothesis testing, we examined the posterior distributions of the regression coefficients, focusing on the main effects of time point and stimulation type, as well as their interaction. We calculated probability values (P+) for each ROI-specific parameter, representing the probability of a positive effect when the mean was positive, or a negative effect when the mean was negative. Effects were considered to show strong evidence when P+ exceeded 0.95 (strong evidence for a positive effect) or fell below 0.05 (strong evidence for a negative effect).
 
+## Methods
+
+- The PSD of the spectrum were computed for 1 s second pre-stimulus period and stimulation period for each trial (and averaged later) and for each region.  
+  The slope and exponent were computed using specparam toolbox [3].
+
+- ITPC was computed, the value averaged in the intervals [−500, −200] ms for prestimuli and [400, 700] ms after sound onset for each of the regions using the wavelet approach described in [2].
+
+- The influence of the stimulus and the exponent on the ITPC were tested by modelling the different relationships with an integrative Bayesian Multilevel Model [1].
+
+- This method allows for better integration of the spatial information and control of multiplicity avoiding information loss of univariate approach followed by the correction for multiple testing.
+
+- Effect estimation and region-level inferences are based on posterior distributions of group differences.
+
+**Following models were tested:**
+
+1. ITPC ~ S (Stimulus)  
+2. ITPC ~ Exponent + Stimulus  
+3. Exponent ~ Stimulus  
+4. Offset ~ Stimulus  
+5. For investigation of the relationship we fit the model  
+   `ITPC : stim Exponent : stim + (1 + Exponent : stim|ROI) + (1 + Exponent : stim|Subject)`  
+   using *z*-scored Exponent. The model was fitted using the **brms** package and *rstan*.
+
+⸻
 
 # Simulations 
 
@@ -233,23 +257,46 @@ Offset values
 :::
 
 
-### Evidence of Three Explanatory Models for the ITPC
+# Results
 
--   The exponent and the offset of the spectrum are different across the brain (Box 1); The parametrization of the slope of the aperiodic component (exponent) might be affected by neural entrainment and increased power in gamma frequency
--   Strong effect of the stimulus (S) on the ITPC (contrast baseline-stimulus), in areas like the auditory regions, but also in temporal lobe, inferior part of primary sensory-motor regions and inferior frontal regions; negative values indicate higher ITPC during stimulation.
--   Model with two explanatory variables $$ ITP  \sim {Exponent} +
-    Stimulus $$ has strong evidence in the same regions, both when considering exponent and stimulus as explanatory variables, with the effects having opposite signs, on the same regions.
--   No particular evidence was found for the model #strong\[Exponent \~ Stimulus\];, namely the stimulation did not influence the exponent per se.
--   No significant evidence was found for any of the models involving the Offset either as a predicted variable, and as a predictor, suggesting a marginal role for it in the auditory entrainment.
+.
 
-::: {#fig-model-evidence}
-![](figures/chapter4/model_evidence.png)
+::: {#bsn2025 fig-scap="Values of exponet of the slope "}
+![](figures/chapter4/bsn2025.png){#fig-bsn2025}
 
-Positive values indicate stronger modulation at baseline, negative values indicate stronger modulation during stimulation.
+Relationship between the slope (parametrized by exponent and the estimated ITPC). Figure on the left: Relationship between Spectral Exponent (z-scored) and ITPC across selected ROIs. Red line indicates linear fit. Data points colored by subject
 :::
 
+- Exponent and the offset of the spectrum are different across the brain (Box 1).
 
-## ITPC including tDCS
+- Strong effect of the stimulus (S) on the ITPC (contrast baseline–stimulus), in areas like the auditory regions, but also in temporal lobe, inferior part of primary sensory-motor regions and inferior frontal regions; negative values indicate higher ITPC during stimulation.
 
-Additionally, we extracted the ROI-specific coefficients to examine regional variation in the  effects. This allowed us to identify potential regions showing differential responses to the stimulation conditions.
-The preliminary analysis revealed no significant differences in ITPC between pre- and post-stimulation timepoints, nor between tDCS and sham conditions. The interaction between timepoint and stimulation type also showed no significant effect. These findings suggest that ITPC measurements can be appropriately pooled across these conditions in subsequent analyses, as the experimental manipulations did not substantially alter the phase coherence measures.
+- No particular evidence was found for the model *Exponent ~ Stimulus*, namely the stimulation did not influence the exponent per se.
+
+- No significant evidence was found for any of the models involving the Offset either as a predicted variable, and as a predictor, suggesting a marginal role for it in the auditory entrainment.
+
+- Looking for a raw relationship between exponent and ITPC shows a positive relationship between the Exponent and the ITPC, suggesting that higher Exponent is associated with higher ITPC, i.e., higher synchrony during stimulation.
+
+- Hierarchical Bayesian modelling allows to estimate the posterior distribution of the coefficients, which can be used to assess the significance of the effect. It also uses pooling of the data across subjects and regions.  
+  The posterior distribution of the coefficient is shown in Box 2, on the right.
+
+<!-- ### Evidence of Three Explanatory Models for the ITPC -->
+
+<!-- -   The exponent and the offset of the spectrum are different across the brain (Box 1); The parametrization of the slope of the aperiodic component (exponent) might be affected by neural entrainment and increased power in gamma frequency -->
+<!-- -   Strong effect of the stimulus (S) on the ITPC (contrast baseline-stimulus), in areas like the auditory regions, but also in temporal lobe, inferior part of primary sensory-motor regions and inferior frontal regions; negative values indicate higher ITPC during stimulation. -->
+<!-- -   Model with two explanatory variables $$ ITP  \sim {Exponent} + -->
+<!--     Stimulus $$ has strong evidence in the same regions, both when considering exponent and stimulus as explanatory variables, with the effects having opposite signs, on the same regions. -->
+<!-- -   No particular evidence was found for the model #strong\[Exponent \~ Stimulus\];, namely the stimulation did not influence the exponent per se. -->
+<!-- -   No significant evidence was found for any of the models involving the Offset either as a predicted variable, and as a predictor, suggesting a marginal role for it in the auditory entrainment. -->
+
+<!-- ::: {#fig-model-evidence} -->
+<!-- ![](figures/chapter4/model_evidence.png) -->
+
+<!-- Positive values indicate stronger modulation at baseline, negative values indicate stronger modulation during stimulation. -->
+<!-- ::: -->
+
+
+<!-- ## ITPC including tDCS -->
+
+<!-- Additionally, we extracted the ROI-specific coefficients to examine regional variation in the  effects. This allowed us to identify potential regions showing differential responses to the stimulation conditions. -->
+<!-- The preliminary analysis revealed no significant differences in ITPC between pre- and post-stimulation timepoints, nor between tDCS and sham conditions. The interaction between timepoint and stimulation type also showed no significant effect. These findings suggest that ITPC measurements can be appropriately pooled across these conditions in subsequent analyses, as the experimental manipulations did not substantially alter the phase coherence measures. -->
