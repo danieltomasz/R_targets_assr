@@ -1,21 +1,27 @@
+### Rationale and aims of the current study
 
-### Current study
+Despite the theoretical importance of understanding the relationship between the 1/f spectral component and oscillatory neural activity, few studies have directly examined how these measures relate within the same dataset and across different brain regions. This gap is significant for several reasons. First, from a theoretical perspective, clarifying whether and how these measures relate can inform models of cortical dynamics and E/I balance. Second, from a methodological perspective, understanding potential confounds in phase-based measures is essential for their valid application. Third, from a clinical perspective, if these measures provide complementary information about circuit function, their combined use could enhance diagnostic and prognostic applications.
+The current study addresses these gaps by investigating the relationship between spectral exponent and ITPC across the whole brain during auditory entrainment. Using MEG data from healthy participants and the well-established 40-Hz ASSR paradigm, we can examine this relationship in a context where gamma synchrony is robust and functionally meaningful. The use of Bayesian multilevel modeling via RBA allows us to appropriately handle the nested structure of the data and the multiple comparisons inherent in whole-brain analysis, providing more robust and interpretable results than traditional approaches. It is important to note that we are reanalyzing existing data that was not originally collected to address these questions, and our sample size is modest (n=15). Additionally, our spectral estimates are derived from relatively short time windows during task performance, which differs from the longer resting-state recordings typically used in spectral parameterization studies. These factors necessarily limit the strength of conclusions we can draw, positioning this work as an initial exploration of these relationships rather than a definitive characterization.
 
-This study investigates the relationship between the aperiodic spectral exponent and local gamma phase-locking as measured by ITPC during 40-Hz ASSR in healthy participants. We analyzed MEG data from 15 participants during auditory stimulation.
+The present study seeks to address four main aims. First, we aim to characterize the spatial distribution of spectral exponent and ITPC across cortical regions and establish whether these measures are stable across experimental conditions. We expect both measures to show spatial distributions that may reflect underlying anatomy, though the short measurement windows and task-based nature of our recordings may influence these patterns. Importantly, we test whether these measures are affected by tDCS intervention. If both measures remain stable across stimulation conditions, this would allow us to pool data, thereby increasing statistical power and simplifying interpretation—an important practical consideration given our modest sample size.
 
-Our analytical strategy utilizes Bayesian multilevel modeling to examine how spectral slope might be related to  ITPC  measured across brain regions while appropriately handling the multiple comparisons inherent in whole-brain analysis. This approach allows us to take into account region-specific effects while borrowing strength across regions through partial pooling, providing more robust and interpretable results than traditional mass-univariate approaches.
+Second, we examine how 40-Hz auditory stimulation affects ITPC and spectral parameters. Based on the established ASSR literature, we anticipate that auditory stimulation will increase ITPC in auditory and temporal regions, confirming neural entrainment to the external rhythm. The effect on spectral parameters, particularly the exponent, is more exploratory. If the spectral exponent shows minimal systematic change during auditory entrainment despite large changes in oscillatory power, this would suggest that it may reflect relatively stable circuit properties rather than moment-to-moment changes in neural state. Such stability would be important for interpreting any relationship between exponent and ITPC, as it would indicate that the measures may capture distinct aspects of circuit function. However, we acknowledge that spectral estimates from short task periods may behave differently than those from longer resting-state recordings, and our ability to detect subtle changes may be limited.
 
-Understanding the relationship between these two putative biomarkers of local neural circuit function has important implications for their use in clinical and research contexts. If they reflect shared biological mechanisms, their combined examination may provide more sensitive and specific markers of local circuit integrity than either measure alone.
+Third, and most centrally, we investigate whether there exists a systematic relationship between spectral exponent and ITPC during auditory entrainment, and whether this relationship shows regional specificity. The theoretical basis for predicting the direction of this relationship is ambiguous. On one hand, if stronger inhibition (reflected in steeper slopes) suppresses oscillatory responses, we might expect weaker phase-locking in regions with higher exponents. On the other hand, if properly balanced inhibition is necessary for precise temporal coordination, stronger inhibition might enable better phase-locking by providing the temporal scaffolding necessary for synchronization. Given this theoretical ambiguity, we do not make a strong directional prediction. However, if a biological relationship exists between these measures, we might expect it to demonstrate certain characteristics: it could show some consistency across subjects; it might be particularly evident in regions where both gamma synchrony and E/I balance are functionally relevant for stimulus processing; and it might show some consistency in direction across regions.
 
-Definitive testing of biological relationship is not easy, hovever, we can partilly test methodological confound hypothesis with simulations of signals with verying  paramenters. The slope-ITPC relationship may partially reflect methodological interdependencies in phase estimation, where steeper slopes (indicating stronger high-frequency attenuation) systematically bias ITPC measurements toward lower values by reducing the signal-to-noise ratio of oscillatory components relative to aperiodic background.
+We acknowledge that definitively distinguishing biological relationships from methodological artifacts is challenging. The slope-ITPC relationship may partially reflect methodological interdependencies in phase estimation, where steeper slopes (indicating stronger high-frequency attenuation) systematically bias ITPC measurements by reducing the signal-to-noise ratio of oscillatory components relative to the broadband background. Definitive testing of biological versus methodological contributions would ideally require simulations of signals with systematically varying parameters, which is beyond the scope of the current reanalysis. However, our analysis can provide initial evidence regarding whether these measures relate systematically and whether such relationships show anatomical and functional specificity. If the relationship demonstrates regional specificity—being strongest in areas with robust ASSR responses—this would suggest at least some biological component beyond pure methodological artifact. Nonetheless, we cannot fully rule out methodological confounding, and our findings should be interpreted with this caveat in mind.
+
+Finally, we explore the specificity of any observed relationship by examining whether ITPC relates similarly to other spectral parameters, particularly the spectral offset. If a relationship is specific to the exponent rather than being a general property of any spectral measure, this would provide some support (though not definitive proof) for the theoretical interpretation that the exponent may reflect E/I balance properties.
+
+Through these analyses, we aim to contribute initial empirical evidence regarding how spectral exponent and stimulus-driven gamma synchrony relate across cortical regions. By examining the stability of spectral parameters during auditory entrainment and testing for effects of neuromodulation, we can assess the basic properties and robustness of these measures in our dataset. While our reanalysis of existing data with a modest sample size and relatively short measurement windows limits the generalizability of our findings, examining these measures in the context of the well-validated ASSR paradigm provides an initial foundation for understanding whether combined spectral slope-oscillatory measures might warrant further investigation as potential biomarkers. Our findings should be interpreted as exploratory and hypothesis-generating, requiring replication in larger samples with recordings specifically designed to address these questions.
 
 ### Participants and experimental design
 
-This study analyzed a magnetoencephalography (MEG) dataset previously described by @pellegrino2019TranscranialDirectCurrent. The experimental procedures were approved by the Ethics Committee of the Province of Venice, and all participants provided written informed consent before participation.
+This study analyzed a magnetoencephalography (MEG) dataset previously described by @pellegrino2019TranscranialDirectCurrent. The experimental procedures were approved by the Ethics Committee of the Province of Venice, and all participants provided written informed consent before participation in accordance with the Declaration of Helsinki.
 
 Fifteen healthy, right-handed volunteers participated (12 females, 3 males; mean age = 28.8 ± 3 years, age range: 20-50 years). Participants were screened using the following exclusion criteria: (1) hearing impairment, (2) current use of medications affecting the central nervous system, (3) history of neuropsychiatric disorders, and (4) any other medical condition that might affect brain function.
 
-The experiment used a within-subjects design to investigate cortical gamma-band synchronization in response to 40 Hz amplitude-modulated auditory stimuli. As shown in @fig-factors, the protocol comprised two  different sessions of bi-hemispheric tDCS stimulation (sham and real) conducted at least 20 hours apart indicated by condition (T): REAL or SHAM. The order of the tDCS stimulation (sham and  real) was counterbalanced across subjects. Stimulation was applied to the left and right pericentral regions [@fig-factors] using standard protocols. The anode was positioned over the left hemisphere and the cathode over the right hemisphere, targeting auditory cortical regions. Real  stimulation lasted 20 min with 20 s of fade-in and fade-out.  Sham stimulation was performed with the same settings, but electrical  current was delivered only for 20 s at the beginning and at the end of  the tDCS session.
+The experiment used a within-subjects design to investigate cortical gamma-band synchronization in response to 40 Hz amplitude-modulated auditory stimuli. As shown in @fig-factors, the protocol comprised two  different sessions of bi-hemispheric tDCS stimulation (sham and real) conducted at least 20 hours apart indicated by condition (T): REAL or SHAM. The order of the tDCS stimulation (sham and  real) was counterbalanced across subjects. Stimulation was applied to the left and right pericentral regions [@fig-factors] using standard protocols. The anode was positioned over the left hemisphere and the cathode over the right hemisphere,, targeting sensorimotor regions with potential indirect effects on connected auditory cortical regions.. Real  stimulation lasted 20 min with 20 s of fade-in and fade-out.  Sham stimulation was performed with the same settings, but electrical  current was delivered only for 20 s at the beginning and at the end of  the tDCS session to provide the initial sensation without inducing neuromodulatory effects.
 
 ::: {#fig-factors}
 
@@ -107,6 +113,26 @@ We compared the ITPC in the POST and real condition  -->
 
 #  Current study
 
+## Statistical Analysis
+
+All statistical analyses were conducted using Bayesian multilevel 
+modeling implemented via the RBA (Region-Based Analysis) program 
+[@chen2019HandlingMultiplicityNeuroimaging] from the AFNI software suite . 
+RBA employs Bayesian inference through the brms package [@burkner2018AdvancedBayesianMultilevel] and Stan probabilistic programming language, but provides a 
+neuroimaging-optimized interface for handling the complex nested 
+structure of our data (regions nested within subjects, repeated 
+measures within subjects).
+
+Region-Based Bayesian Analysis
+
+Due to the high-dimensional nature of our data (148 regions × 15 
+subjects × 4 conditions) and computational constraints, we adopted 
+a region-based Bayesian analysis approach for testing condition 
+effects and the exponent-ITPC relationship. For each cortical region 
+separately, we fitted Bayesian multilevel models accounting for 
+within-subject dependencies:
+
+
 ###  Distribution of variables of interest
 
 To examine potential differences in inter-trial phase coherence (ITPC) across experimental conditions, we conducted a Bayesian multilevel analysis using the brms package (Bürkner, 2017) in R ( R version `4.5.1` and brms version `2.22`). 
@@ -183,7 +209,32 @@ For hypothesis testing, we examined the posterior distributions of the regressio
    `ITPC : stim Exponent : stim + (1 + Exponent : stim|ROI) + (1 + Exponent : stim|Subject)`  
    using *z*-scored Exponent. The model was fitted using the **brms** package and *rstan*.
 
-⸻
+
+# Main Model Specification
+
+We fitted separate models to test: (1) the effect of auditory 
+stimulation on ITPC, (2) the effect of tDCS on ITPC and spectral 
+parameters, and (3) the relationship between spectral exponent and 
+ITPC.
+
+For the primary analysis examining the exponent-ITPC relationship, 
+we specified:
+
+ITPC_stim ~ 1 + exponent_z + (1 + exponent_z | subject) + (1 | ROI)
+
+where exponent_z represents the within-subject standardized spectral 
+exponent, and random effects account for both subject-specific 
+variation in baseline ITPC and in the exponent-ITPC relationship, 
+as well as ROI-specific baseline differences. This specification 
+allows the exponent-ITPC relationship to vary across subjects while 
+incorporating partial pooling across ROIs.
+
+We employed a Student's t-distribution likelihood (df = 3) to 
+accommodate potential outliers. All models were fitted using 4 MCMC 
+chains with 4,000 iterations each (1,000 warmup), with adapt_delta 
+set to 0.95 to ensure adequate exploration of the posterior 
+distribution.
+
 
 # Simulations 
 
@@ -259,7 +310,26 @@ Offset values
 
 # Results
 
-.
+Inference and Multiple Comparisons
+
+For each ROI, we extracted posterior distributions for parameters 
+of interest. We calculated posterior probabilities P(β > 0 | data) 
+for positive effects and P(β < 0 | data) for negative effects. 
+
+To control for multiple comparisons across 148 cortical regions, 
+RBA automatically adjusts inference thresholds. We considered 
+effects credible when the posterior probability exceeded 0.95 
+(equivalent to a Bayesian analog of p < 0.05, two-tailed). Effect 
+sizes were quantified as the predicted change in ITPC for a 1-SD 
+increase in spectral exponent.
+
+Convergence was assessed via R̂ < 1.01 for all parameters and 
+visual inspection of trace plots. Model fit was evaluated using 
+posterior predictive checks
+
+In this model I am more interested in “random” ecect of exponent than ﬁxed
+
+Z-normalizing is useful for interpretation later, particularly when exponent_z is at 0
 
 ::: {#bsn2025 fig-scap="Values of exponet of the slope "}
 ![](figures/chapter4/bsn2025.png){#fig-bsn2025}
