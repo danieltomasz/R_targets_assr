@@ -1,7 +1,28 @@
-# The steeper 1/f slope of MEG power spectrum is associated with stronger gamma synchrony, measured via inter-trial phase coherence (ITPC) in the 40-Hz auditory steady-state response
+---
+title: "The steeper 1/f slope of MEG power spectrum is associated with stronger gamma synchrony, measured via inter-trial phase coherence (ITPC) in the 40-Hz auditory steady-state response"
+author: "Daniel Borek"
+date: today
+keywords: ["keyword1", "keyword2", "keyword3"]
+subtitle: "Optional Subtitle"
+abstract: |
+  Neural oscillations and  parametrized dynamicsof  power spectrum of brain activity  (spectral slope) are increasingly recognized as important biomarkers of brain function, yet their interrelationship remains poorly understood. This chapter investigates the relationship between two key electrophysiological measures: the parametrized exponent of PSD slope (1/f slope) and gamma-band phase-locking measured through inter-trial phase coherence (ITPC) during 40-Hz auditory steady-state responses (ASSR). Using magnetoencephalography (MEG) data from 15 healthy participants and Bayesian multilevel modeling via Region-Based Analysis (RBA), we examined whether spectral slope relates to the strength of stimulus-driven gamma synchronization across 148 cortical regions.
+lang: en
+fontsize: 12pt
+geometry: margin=1in
+format:
+  docx:
+    toc: true           # include a table of contents
+    toc-depth: 3        # how many heading levels to include
+    number-sections: true
+    highlight-style: "pygments"      # code highlighting theme
+    keep-md: false
 
-## Abstract {.unnumbered} 
-Neural oscillations and  parametrized dynamicsof  power spectrum of brain activity  (spectral slope) are increasingly recognized as important biomarkers of brain function, yet their interrelationship remains poorly understood. This chapter investigates the relationship between two key electrophysiological measures: the parametrized exponent of PSD slope (1/f slope) and gamma-band phase-locking measured through inter-trial phase coherence (ITPC) during 40-Hz auditory steady-state responses (ASSR). Using magnetoencephalography (MEG) data from 15 healthy participants and Bayesian multilevel modeling via Region-Based Analysis (RBA), we examined whether spectral slope relates to the strength of stimulus-driven gamma synchronization across 148 cortical regions.
+---
+
+<!-- # The steeper 1/f slope of MEG power spectrum is associated with stronger gamma synchrony, measured via inter-trial phase coherence (ITPC) in the 40-Hz auditory steady-state response -->
+
+<!-- ## Abstract {.unnumbered}  -->
+<!-- Neural oscillations and  parametrized dynamicsof  power spectrum of brain activity  (spectral slope) are increasingly recognized as important biomarkers of brain function, yet their interrelationship remains poorly understood. This chapter investigates the relationship between two key electrophysiological measures: the parametrized exponent of PSD slope (1/f slope) and gamma-band phase-locking measured through inter-trial phase coherence (ITPC) during 40-Hz auditory steady-state responses (ASSR). Using magnetoencephalography (MEG) data from 15 healthy participants and Bayesian multilevel modeling via Region-Based Analysis (RBA), we examined whether spectral slope relates to the strength of stimulus-driven gamma synchronization across 148 cortical regions. -->
 
 
 *Our primary finding reveals a positive relationship between spectral exponent and ITPC during auditory entrainment: steeper spectral slopes are associated with stronger phase-locking to 40-Hz stimulation.* This relationship was robust across subjects and particularly evident in regions showing strong ASSR responses, including auditory and temporal cortices. Importantly, neither measure was affected by transcranial direct current stimulation (tDCS) intervention, allowing data to be pooled across experimental conditions. These findings suggest that spectal slope and oscillatory features, both potentially reflecting excitation-inhibition (E/I) balance, are functionally coupled during stimulus-driven neural synchronization. The combined examination of these measures may provide more sensitive markers of local circuit integrity than either measure alone, with implications for understanding neuropsychiatric conditions characterized by altered E/I balance.
@@ -104,4 +125,4 @@ This methodological concern is particularly relevant for ITPC measurements when 
 The methodological confound hypothesis makes specific predictions: if the relationship between exponent and ITPC is purely methodological, it should (1) be present even in simulated data where there is no biological coupling between the two measures, (2) be strongest when oscillatory peaks are weak relative to the broadband background, and (3) potentially reverse direction depending on the specific time-frequency analysis parameters used. In contrast, a biological relationship should show anatomical and functional specificity, being strongest in regions where both gamma synchrony and E/I balance are functionally relevant.
 
 
-{{< include ch04_methods_results.qmd >}}
+{{< include ch04_methods.qmd >}}

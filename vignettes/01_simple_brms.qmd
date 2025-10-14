@@ -248,7 +248,7 @@ itpc_rba$brain_plot
 
 # zapisz figurę jako PNG
 ggplot2::ggsave(
-  filename = here::here("manuscript/figures/chapter4", "ch04-fig-brain-itpc.png"),
+  filename = here::here("manuscript/figures/chapter4", "ch04-fig-brain-diff-itpc.png"),
   plot = itpc_rba$brain_plot,
   width = 8,
   height = 6,
