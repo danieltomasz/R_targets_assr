@@ -1,19 +1,17 @@
 ### Rationale and aims of the current study
 
-Despite the theoretical importance of understanding the relationship between the 1/f spectral component and oscillatory neural activity, few studies have directly examined how these measures relate within the same dataset and across different brain regions. This gap is significant for several reasons. First, from a theoretical perspective, clarifying whether and how these measures relate can inform models of cortical dynamics and E/I balance. Second, from a methodological perspective, understanding potential confounds in phase-based measures is essential for their valid application. Third, from a clinical perspective, if these measures provide complementary information about circuit function, their combined use could enhance diagnostic and prognostic applications.
-The current study addresses these gaps by investigating the relationship between spectral exponent and ITPC across the whole brain during auditory entrainment. Using MEG data from healthy participants and the well-established 40-Hz ASSR paradigm, we can examine this relationship in a context where gamma synchrony is robust and functionally meaningful. The use of Bayesian multilevel modeling via RBA allows us to appropriately handle the nested structure of the data and the multiple comparisons inherent in whole-brain analysis, providing more robust and interpretable results than traditional approaches. It is important to note that we are reanalyzing existing data that was not originally collected to address these questions, and our sample size is modest (n=15). Additionally, our spectral estimates are derived from relatively short time windows during task performance, which differs from the longer resting-state recordings typically used in spectral parameterization studies. These factors necessarily limit the strength of conclusions we can draw, positioning this work as an initial exploration of these relationships rather than a definitive characterization.
+Despite the theoretical importance of understanding the relationship between the 1/f spectral component and oscillatory neural activity, few studies have directly examined how these measures relate within the same dataset and across different brain regions. This gap is significant because clarifying these relationships could inform models of cortical dynamics, help validate phase-based measures, and potentially enhance clinical biomarker development through combined approaches.
+The current study addresses these gaps by investigating the relationship between spectral exponent and ITPC across the whole brain during auditory entrainment. Using MEG data from healthy participants and the well-established 40-Hz ASSR paradigm, we can examine this relationship in a context where gamma synchrony is robust and functionally meaningful. The use of Bayesian multilevel modeling via RBA allows us to appropriately handle the nested structure of the data and the multiple comparisons inherent in whole-brain analysis. It is important to note that we are reanalyzing existing data that was not originally collected to address these questions, and our sample size is modest (n=15). Additionally, our spectral estimates are derived from relatively short time windows during task performance, which differs from the longer resting-state recordings typically used in spectral parameterization studies. These factors necessarily limit the strength of conclusions we can draw, positioning this work as an initial exploration of these relationships rather than a definitive characterization.
 
 The present study seeks to address four main aims. First, we aim to characterize the spatial distribution of spectral exponent and ITPC across cortical regions and establish whether these measures are stable across experimental conditions. We expect both measures to show spatial distributions that may reflect underlying anatomy, though the short measurement windows and task-based nature of our recordings may influence these patterns. Importantly, we test whether these measures are affected by tDCS intervention. If both measures remain stable across stimulation conditions, this would allow us to pool data, thereby increasing statistical power and simplifying interpretation—an important practical consideration given our modest sample size.
 
 Second, we examine how 40-Hz auditory stimulation affects ITPC and spectral parameters. Based on the established ASSR literature, we anticipate that auditory stimulation will increase ITPC in auditory and temporal regions, confirming neural entrainment to the external rhythm. The effect on spectral parameters, particularly the exponent, is more exploratory. If the spectral exponent shows minimal systematic change during auditory entrainment despite large changes in oscillatory power, this would suggest that it may reflect relatively stable circuit properties rather than moment-to-moment changes in neural state. Such stability would be important for interpreting any relationship between exponent and ITPC, as it would indicate that the measures may capture distinct aspects of circuit function. However, we acknowledge that spectral estimates from short task periods may behave differently than those from longer resting-state recordings, and our ability to detect subtle changes may be limited.
 
-Third, and most centrally, we investigate whether there exists a systematic relationship between spectral exponent and ITPC during auditory entrainment, and whether this relationship shows regional specificity. The theoretical basis for predicting the direction of this relationship is ambiguous. On one hand, if stronger inhibition (reflected in steeper slopes) suppresses oscillatory responses, we might expect weaker phase-locking in regions with higher exponents. On the other hand, if properly balanced inhibition is necessary for precise temporal coordination, stronger inhibition might enable better phase-locking by providing the temporal scaffolding necessary for synchronization. Given this theoretical ambiguity, we do not make a strong directional prediction. However, if a biological relationship exists between these measures, we might expect it to demonstrate certain characteristics: it could show some consistency across subjects; it might be particularly evident in regions where both gamma synchrony and E/I balance are functionally relevant for stimulus processing; and it might show some consistency in direction across regions.
+Third, and most centrally, we investigate whether there exists a systematic relationship between spectral exponent and ITPC during auditory entrainment, and whether this relationship shows regional specificity. As discussed in the theoretical framework above, the predicted direction of this relationship is ambiguous, and definitively distinguishing biological from methodological contributions is challenging. Our analysis can provide initial evidence regarding whether these measures relate systematically and whether such relationships show the anatomical and functional specificity that would suggest biological relevance beyond pure methodological artifact. However, definitive testing would require controlled simulations with systematically varying parameters, which is beyond the scope of this reanalysis. We cannot fully rule out methodological confounding, and our findings should be interpreted with this caveat in mind.
 
-We acknowledge that definitively distinguishing biological relationships from methodological artifacts is challenging. The slope-ITPC relationship may partially reflect methodological interdependencies in phase estimation, where steeper slopes (indicating stronger high-frequency attenuation) systematically bias ITPC measurements by reducing the signal-to-noise ratio of oscillatory components relative to the broadband background. Definitive testing of biological versus methodological contributions would ideally require simulations of signals with systematically varying parameters, which is beyond the scope of the current reanalysis. However, our analysis can provide initial evidence regarding whether these measures relate systematically and whether such relationships show anatomical and functional specificity. If the relationship demonstrates regional specificity—being strongest in areas with robust ASSR responses—this would suggest at least some biological component beyond pure methodological artifact. Nonetheless, we cannot fully rule out methodological confounding, and our findings should be interpreted with this caveat in mind.
+Finally, we explore the specificity of any observed relationship by examining whether ITPC relates similarly to other spectral parameters, particularly the spectral offset. If a relationship is specific to the exponent rather than being a general property of any spectral measure, this would provide some support for the theoretical interpretation that the exponent may reflect E/I balance properties.
 
-Finally, we explore the specificity of any observed relationship by examining whether ITPC relates similarly to other spectral parameters, particularly the spectral offset. If a relationship is specific to the exponent rather than being a general property of any spectral measure, this would provide some support (though not definitive proof) for the theoretical interpretation that the exponent may reflect E/I balance properties.
-
-Through these analyses, we aim to contribute initial empirical evidence regarding how spectral exponent and stimulus-driven gamma synchrony relate across cortical regions. By examining the stability of spectral parameters during auditory entrainment and testing for effects of neuromodulation, we can assess the basic properties and robustness of these measures in our dataset. While our reanalysis of existing data with a modest sample size and relatively short measurement windows limits the generalizability of our findings, examining these measures in the context of the well-validated ASSR paradigm provides an initial foundation for understanding whether combined spectral slope-oscillatory measures might warrant further investigation as potential biomarkers. Our findings should be interpreted as exploratory and hypothesis-generating, requiring replication in larger samples with recordings specifically designed to address these questions.
+Through these analyses, we aim to contribute initial empirical evidence regarding how spectral exponent and stimulus-driven gamma synchrony relate across cortical regions. While our reanalysis of existing data with a modest sample size and relatively short measurement windows limits the generalizability of our findings, examining these measures in the context of the well-validated ASSR paradigm provides an initial foundation for understanding whether combined spectral slope-oscillatory measures might warrant further investigation as potential biomarkers. Our findings should be interpreted as exploratory and hypothesis-generating, requiring replication in larger samples with recordings specifically designed to address these questions.
 
 ### Participants and experimental design
 
@@ -30,8 +28,7 @@ The experiment used a within-subjects design to investigate cortical gamma-band 
 Design of the orginal experiment. Source: [@pellegrino2019TranscranialDirectCurrent]
 :::
 
-Each session included two blocks corresponding to conditions related to the time (P) of applying tDCS stimulation: PRE (before tDCS) and POST (after tDCS). @fig-sound2 shows the structure of a paradigm used to induce 40 Hz synchrony during a single block. Each block consisted of 180 repetitions lasting 2 s each. Each trial included 1 s of pause (S=PRESTIM condition) followed by a 40 Hz amplitude-modulated (AM) tone (S=STIM condition), so that the stimulus onset asynchrony was 2 s. Each block lasted a total of 6 minutes (180 trials × 2 seconds).
-@fig-sound1 illustrates the auditory stimulus, an amplitude modulated tone with the following parameters: carrier frequency = 1,000 Hz and amplitude modulating frequency = 40 Hz. 
+Each session included two blocks corresponding to conditions related to the time (P) of applying tDCS stimulation: PRE (before tDCS) and POST (after tDCS). @fig-sound2 shows the structure of the paradigm used to induce 40 Hz synchrony during a single block. Each block consisted of 180 repetitions lasting 2 s each. Each trial included 1 s of pause (S=PRESTIM condition) followed by a 40 Hz amplitude-modulated (AM) tone (S=STIM condition), so that the stimulus onset asynchrony was 2 s. Each block lasted a total of 6 minutes (180 trials × 2 seconds). @fig-sound1 illustrates the auditory stimulus, an amplitude modulated tone with the following parameters: carrier frequency = 1,000 Hz and amplitude modulating frequency = 40 Hz. 
 
 ::: {#fig-signal layout-ncol=2}
 
@@ -51,12 +48,19 @@ Structure of auditory stimulation. Adapted from @pellegrino2019TranscranialDirec
 
 This factorial design resulted in four key measurement blocks per participant: PRE-REAL, POST-REAL, PRE-SHAM, and POST-SHAM. However, for the present analysis focusing on baseline cortical gamma synchronization, only the PRE-REAL and PRE-SHAM conditions were analyzed—capturing neural responses prior to any neuromodulatory intervention. -->
 
+This experimental design allows us to examine ITPC and spectral parameters in multiple contexts: during the inter-stimulus pauses when no sound is presented (pre-stimulus periods), during auditory stimulation (stimulus periods), before and after neuromodulation (PRE vs. POST), and with real versus sham intervention. For the current analysis, we focus primarily on the PRE-tDCS conditions to characterize the baseline relationship between exponent and ITPC, but we also test whether tDCS affects these measures to determine whether data can be pooled across conditions.
+
+
 ### MEG Data acquisition and preprocessing
 
 MEG scans were performed at the MEGLab of the IRCCS San Camillo Hospital in Venice in a shielded room with a CTF-MEG system equipped with 275 gradiometers.
-As outlined in [@pellegrino2019TranscranialDirectCurrent] MEG data preprocessing included: third-order spatial gradient noise cancellation, downsampling to 600 Hz, signal space-separation. Heartbeat and eye-movement artefacts were cleaned with the SSP approach. MEG data was cut in 3 s epochs ranging from −1.5 s to +1.5 s around the 40 Hz sound onset. Epochs were visually inspected and those affected by artefacts were manually rejected. The available MRI scans were segmented and processed through Freesurfer software. The surface was divided into 15,000 vertices imported into Brainstorm toolbox and downsampled into 8.000 vertices. The coregistration between functional MEG data and anatomical MRI data was performed via the Brainstorm toolbox.
+As outlined in [@pellegrino2019TranscranialDirectCurrent] MEG data preprocessing included: third-order spatial gradient noise cancellation, downsampling to 600 Hz, signal space-separation. Heartbeat and eye-movement artefacts were cleaned with the SSP approach. MEG data was cut in 3 s epochs ranging from −1.5 s to +1.5 s around the 40 Hz sound onset. Epochs were visually inspected and those affected by artefacts were manually rejected. 
 
-Data was bandpass filtered betweeen 2 and 80 Hz and then notch filtered for 50\~Hz. The inverse problem for source estimation was solved with the whitened and depth-weighted linear L2-minimum norm estimate, with the dipole orientation constrained to be normal to the cortical surface. A common imaging kernel was computed and then applied to obtain single epoch cortical reconstructions. Data was projected into regions using @destrieux2010AutomaticParcellationHuman atlas and exported from Brainstorm into MNE Python.
+The available MRI scans were segmented and processed through Freesurfer software. The surface was divided into 15,000 vertices imported into Brainstorm toolbox and downsampled into 8.000 vertices. The coregistration between functional MEG data and anatomical MRI data was performed via the Brainstorm toolbox.
+
+Data was bandpass filtered between 2 and 80 Hz using a zero-phase finite impulse response (FIR) filter and then notch filtered for 50\~Hz. The inverse problem for source estimation was solved with the whitened and depth-weighted linear L2-minimum norm estimate.  Dipole orientations were constrained to be normal to the cortical surface, as cortical pyramidal neurons are oriented perpendicular to the cortical sheet. A common imaging kernel was computed across all participants and conditions to ensure consistent spatial resolution and then applied to each epoch to obtain single-trial source estimates. 
+
+Data was projected into 148 cortical regions (74 per hemisphere) using the @destrieux2010AutomaticParcellationHuman atlas. This parcellation provides anatomically defined regions based on cortical gyri and sulci, offering a good balance between spatial specificity and statistical power. For each region, source estimates were averaged across all vertices within that region, producing one time series per region per epoch. The region-level data were then exported from Brainstorm into MNE Python [@gramfort2013MEGEEGData] for further analysis.
 
 <!-- // TODO: check if this is correct -->
 
@@ -68,23 +72,29 @@ Data was bandpass filtered betweeen 2 and 80 Hz and then notch filtered for 50\~
 
 #### PSD and Aperiodic Parametrization
 
-For every trial, the 1s second fragment before sound stimulation and 1s  fragment during  the sound stimulation was extracted. For those  intervals power spectral density was computed using MNE Python using `welch` method and the median was taken across trials  in a block (as is more roboust than just averaging). Then the slope and exponent of the spectrum were computed for each region of interest using `specparam` toolbox [@donoghue2020ParameterizingNeuralPower]. 
+For every trial, two 1 s segments were extracted: one before sound stimulation onset (−1 s to 0 s; PRESTIM condition) and one during sound stimulation (0 s to 1 s; STIM condition). For each segment, the power spectral density (PSD) was computed using Welch's method as implemented in MNE Python. Welch's method involves dividing the signal into overlapping segments, computing the periodogram for each segment, and averaging across segments to reduce variance in the spectral estimate. The median PSD was then computed across trials within each condition for each region. We used the median rather than the mean because it is more robust to outliers and occasional high-power trials (results using the mean were not qualitatively different). The resulting PSD represents the typical spectral content for that region, condition, and participant. . The resulting PSD represents the typical spectral content for that region, condition, and participant. 
 
-In the algorithm the power spectrum PSD is modeled as a combination of the aperiodic component AP and a sum of N oscillatory peaks modeled as a Gaussians:
+Spectral parameterization was performed using the specparam toolbox [@donoghue2020ParameterizingNeuralPower] (formerly FOOOF), which decomposes the power spectrum into periodic (oscillatory peaks) and a power law (1/f-like) component. The algorithm models the power spectrum PSD as:
+
 
 $$ 
-P = A P + \sum_{n=0}^N G_n. 
+P(f) = L(f) + \sum_{n=0}^N G_n(f). 
 $$
 
-The component $AP(f)$ for frequency $f$ can expressed by the formula:
-
+where $L(f)$ is the power law component and $G_n(f)$ are Gaussian peaks representing oscillations. The power law component is modeled as:
 $$
-A P(f) = b - \log(k + f^\chi)
+L(f) = b - \log(k + f^\chi)
 $$
 
-where $b$ is the broadband offset, $chi$ is the exponent and $k$ is the knee parameter. The  exponent $\chi$ is related to the negative slope  of the power spectrum in log-log space, that is,  the inverse relationship between power and frequency; The offset b describe the uniform shift  in power across frequencies.
-The frequency range on which the algorithm was fitted span interval [3, 45]. The parameters with which data were analysed are the following hyperparameters : `peak_width_limits` =\[1, 8\], `min_peak_height`=0.15, `peak_threshold`=2.0.  
 
+where $b$ is the broadband offset (overall power level), $chi$ is the exponent (spectral slope in log-log space) and $k$ is the optional "knee" parameter. The  exponent $\chi$ is related to the negative slope  of the power spectrum in log-log space, that is,  the inverse relationship between power and frequency: higher values indicate steeper slopes (faster power decay), while lower values indicate flatter slopes. The offset $b$ describe the uniform shift  in power across frequencies.
+
+<!--  The frequency range on which the algorithm was fitted span interval [3, 45]. The parameters with which data were analysed are the following hyperparameters : `peak_width_limits` =\[1, 8\], `min_peak_height`=0.15, `peak_threshold`=2.0.  -->
+
+For this analysis, we used a fixed knee parameter $(k=0)$, assuming a power-law relationship without a knee, which is appropriate for most cortical regions in this frequency range. The algorithm was fitted to the frequency range [3, 45] Hz. The lower bound avoids very low frequencies where spectral estimation is less reliable due to the finite signal length, while the upper bound encompasses the 40-Hz ASSR response and surrounding gamma activity while excluding higher frequencies that may be contaminated by 50 Hz artifacts. The fitting parameters were:
+`peak_width_limits` = \[1, 8\] Hz (constraining peak widths to plausible ranges for neural oscillations), `min_peak_height` = 0.15 (peaks must rise at least 0.15 log-units above the power law fit), and `peak_threshold` = 2.0 (peaks must be at least 2 standard deviations above the power law component).
+
+The output of the parameterization for each region, condition, and participant includes the exponent $\chi$, offset $b$, and parameters of any detected peaks (center frequency, amplitude, bandwidth). For the current analysis, we focus on the exponent and offset as measures derived from the 1/f spectral component
 <!--  The outputs of the algorithm for estimated peaks are the mean of the Gaussian $G_n$ for the center frequency of the peak, aperiodic-adjusted power (the distance between the peak of the Gaussian and the aperiodic fit at this frequency) and bandwidth as 2 SD of the fitted Gaussian. 
 
 -->
@@ -99,38 +109,25 @@ The analysis examined frequencies from 2-45 Hz, encompassing delta through low g
 
 <!-- A paragraph about neural synchrony here -->
 
-Spectral modulations and phase consistency of ASSR in MEG and EEG data are highly reproducible, providing support for other research [@tan2015MEGmeasuredAuditorySteadystate; @pellegrino2019TranscranialDirectCurrent]. ASSR are usually investigated by looking at the inter-trial phase coherence (ITPC) . The inter-trial phase coherence (ITPC) is defined using the length of the mean phase angle,
-$$
-\text{ITPC} =  \left| \frac{1}{N} \sum_{k=1}^{N} e^{i \cdot \phi_k} \right|,
-$$ 
-where $N$ represents the number of trials, $e^{i\phi_k}$ is complex polar representation the phase angle $\phi$ of the trial $k$. ITPC is an measure of phase consistency over trials, can take values between 0 and 1. The higher is ITPC, the higher is the 40 Hz gamma synchronization
+Spectral modulations and phase consistency of ASSR in MEG and EEG data are highly reproducible, providing a robust measure for investigating neural synchrony [@tan2015MEGmeasuredAuditorySteadystate; @pellegrino2019TranscranialDirectCurrent]. ASSR are typically quantified using inter-trial phase coherence (ITPC), which measures the consistency of oscillatory phase across repeated presentations of the same stimulus. . The inter-trial phase coherence (ITPC) is defined using the length of the mean phase angle at a given time-frequency point  as:
 
-The ITPC was computed for 1s second pre-stimulus period and  1s stimulation period via Time-Frequency Representation (TFR) using Morlet wavelets approach implemented in MNE Python (1.9) in the 39-41 Hz gamma band for each epoch.\
-<!-- with the following parameters: `freqs` = \[39-41\] Hz, `n_cycles` = 20.--> Values of ITPC were extracted in the period of -500ms to - 200ms in the period before sound stimulation starts and 300 ms to 700 ms during the  sound stimulation, counting on the time of brain reaching steady-state (@pellegrino2019TranscranialDirectCurrent) and averaged in those periods.
+$$
+\text{ITPC}(f,t) =  \left| \frac{1}{N} \sum_{k=1}^{N} e^{i \cdot \phi_k (f,t)} \right|,
+$$ 
+where $N$ represents the number of trials, $e^{i\phi_k}$ is complex polar representation the phase angle $\phi$ of the trial $k$. ITPC is an measure of phase consistency over trials, ranges from 0 (completely inconsistent phases across trials) to 1 (identical phase across all trials). Higher ITPC values indicate stronger and more consistent phase-locking to the stimulus.
+
+The ITPC was computed for both 1s second pre-stimulus period and  1s stimulation period via Time-Frequency Representation (TFR) using Morlet wavelets approach implemented in MNE Python (1.9) in the 39-41 Hz gamma band for each epoch.\
+<!-- with the following parameters: `freqs` = \[39-41\] Hz, `n_cycles` = 20.--> To obtain a single value per condition, we extracted the mean ITPC in specific time windows: −500 ms to −200 ms for the pre-stimulus baseline (avoiding edge effects) and 300 ms to 700 ms for the stimulation period. The rationale for the stimulation window is that brain activity typically reaches a steady-state response after about 200-300 ms of continuous stimulation [@pellegrino2019TranscranialDirectCurrent], and we avoid the early transient response.
 
 <!-- We computed the ITPC in all conditions
 We compared the ITPC in the POST and real condition  -->
 
-#  Current study
 
 ## Statistical Analysis
 
-All statistical analyses were conducted using Bayesian multilevel 
-modeling implemented via the RBA (Region-Based Analysis) program 
-[@chen2019HandlingMultiplicityNeuroimaging] from the AFNI software suite . 
-RBA employs Bayesian inference through the brms package [@burkner2018AdvancedBayesianMultilevel] and Stan probabilistic programming language, but provides a 
-neuroimaging-optimized interface for handling the complex nested 
-structure of our data (regions nested within subjects, repeated 
-measures within subjects).
+All statistical analyses were conducted using Bayesian multilevel modeling. The primary implementation used the Region-Based Analysis (RBA) program [@chen2019HandlingMultiplicityNeuroimaging] from the AFNI software suite, which provides a neuroimaging-optimized interface for Bayesian hierarchical models. RBA employs Bayesian inference through the brms package [@burkner2017BrmsPackageBayesian] and the Stan probabilistic programming language, but provides convenient wrappers for handling the nested structure of neuroimaging data (regions nested within subjects).
 
-Region-Based Bayesian Analysis
-
-Due to the high-dimensional nature of our data (148 regions × 15 
-subjects × 4 conditions) and computational constraints, we adopted 
-a region-based Bayesian analysis approach for testing condition 
-effects and the exponent-ITPC relationship. For each cortical region 
-separately, we fitted Bayesian multilevel models accounting for 
-within-subject dependencies:
+Bayesian multilevel modeling offers several advantages over traditional frequentist approaches for this type of analysis. First, it naturally handles the hierarchical structure of the data, allowing us to model both within-subject and between-subject variability while appropriately accounting for the non-independence of observations. Second, it provides full posterior distributions for all parameters, allowing us to quantify uncertainty and make probabilistic statements about effect sizes. Third, it enables partial pooling, where region-specific estimates "borrow strength" from the overall pattern across regions, leading to more stable estimates especially for regions with high variability or outliers. Fourth, it provides a principled approach to multiple comparisons through the hierarchical model structure, avoiding the need for ad-hoc corrections that can be overly conservative.
 
 
 ###  Distribution of variables of interest
