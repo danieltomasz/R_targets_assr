@@ -26,3 +26,5 @@ notebooks/sandbox/
 **.Rdata
 .RDataTmp
 _output/
+notebooks/targets.txt
+notebooks/targets_no_qmd.txt

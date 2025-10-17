@@ -20,3 +20,9 @@ r:
 	
 context:
 	files-to-prompt .  --ignore ./_archive -e qmd -e R  -e md -e Rmd --cxml -o notebooks/targets.txt
+	
+context_no_qmd:
+	files-to-prompt .  --ignore ./_archive  -e .R  -e .md -e .Rmd --cxml -o notebooks/targets_no_qmd.txt
+
+render:
+	quarto render manuscript/ch04.qmd

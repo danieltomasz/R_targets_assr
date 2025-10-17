@@ -37,10 +37,8 @@ For the primary analysis examining the relationship between spectral exponent an
 
 $$ITPC_stim ~ 1 + exponent_z + (1 + exponent_z | subject) + (1 | ROI)$$
 
-where exponent_z represents the within-subject standardized spectral 
-exponent, and random effects account for both subject-specific 
-variation in baseline ITPC and in the exponent-ITPC relationship, 
-as well as ROI-specific baseline differences. This specification 
+where exponent_z represents the within-subject standardized spectral exponent, and random effects account for both subject-specific 
+variation in baseline ITPC and in the exponent-ITPC relationship,  as well as ROI-specific baseline differences. This specification 
 allows the exponent-ITPC relationship to vary across subjects while 
 
 ### Inference and multiple comparisons

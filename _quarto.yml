@@ -2,9 +2,6 @@ project:
   type: default
   output-dir: _output
 
-resource-path:
-  - .          # project root
-  - figures    # image folder under root
 
 reference-section-title: References
 citeproc: true  # ← Change this to false
@@ -71,9 +68,6 @@ format:
     # include-after-body:
     #   text: |
     #     \printindex
-
-
-
 
 
 execute:
