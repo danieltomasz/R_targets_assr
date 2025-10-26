@@ -1,0 +1,553 @@
+---
+title: "Testing ITPC Data Poolability Across Experimental Conditions"
+author: "Analysis Notebook"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    code-tools: true
+    df-print: paged
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+# Overview
+
+This notebook tests whether Inter-Trial Phase Coherence (ITPC) data can be pooled across different experimental conditions in the tDCS-ASSR study.
+
+**Experimental Design:**
+
+- **Period (P):** pre, post (relative to tDCS)
+- **Treatment (T):** real, sham (tDCS type)
+- **Stimulus State (type):** prestim_itpc, stim_itpc (silence vs 40-Hz stimulus)
+
+**Key Questions:**
+
+1. Is the variance homogeneous across conditions?
+2. Are there significant interactions between factors?
+3. Can we justify pooling data across certain conditions?
+
+# Setup
+
+```{r setup}
+library(tidyverse)
+library(brms)
+library(bayestestR)
+library(ggdist)
+library(patchwork)
+library(car)        # For Levene's test
+library(emmeans)    # For estimated marginal means
+library(broom)      # For tidy model outputs
+library(GGally)     # For pairs plots
+
+# Set theme
+theme_set(theme_minimal(base_size = 12))
+
+# Color palette for conditions
+condition_colors <- c(
+  "pre_real" = "#0571b0",
+  "pre_sham" = "#92c5de",
+  "post_real" = "#ca0020",
+  "post_sham" = "#f4a582"
+)
+```
+
+# Data Import
+
+```{r import-data}
+# Import ITPC data
+itpc_data <- read_csv("../data/Destrieux_final_itpc.csv") %>%
+  mutate(
+    subject = factor(subject),
+    roi = factor(roi),
+    task = factor(task),
+    P = factor(P, levels = c("pre", "post")),
+    T = factor(T, levels = c("real", "sham")),
+    type = factor(type, levels = c("prestim_itpc", "stim_itpc")),
+    # Create combined condition factor
+    condition = interaction(P, T, sep = "_")
+  )
+
+# Display data structure
+glimpse(itpc_data)
+
+# Summary statistics
+summary(itpc_data$value)
+```
+
+## Data Overview
+
+```{r data-summary}
+# Count observations per condition
+itpc_data %>%
+  count(P, T, type, name = "n_observations") %>%
+  arrange(P, T, type)
+
+# Number of subjects and ROIs
+cat("Number of subjects:", n_distinct(itpc_data$subject), "\n")
+cat("Number of ROIs:", n_distinct(itpc_data$roi), "\n")
+```
+
+# Descriptive Statistics by Condition
+
+```{r descriptive-stats}
+# Compute summary statistics by condition
+condition_summary <- itpc_data %>%
+  group_by(P, T, type, condition) %>%
+  summarise(
+    n = n(),
+    mean = mean(value, na.rm = TRUE),
+    median = median(value, na.rm = TRUE),
+    sd = sd(value, na.rm = TRUE),
+    var = var(value, na.rm = TRUE),
+    iqr = IQR(value, na.rm = TRUE),
+    min = min(value, na.rm = TRUE),
+    max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+condition_summary
+```
+
+# Visual Inspection of Distributions
+
+## Overall Distribution by Condition
+
+```{r dist-by-condition, fig.width=10, fig.height=6}
+ggplot(itpc_data, aes(x = value, fill = condition)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~type, ncol = 1) +
+  scale_fill_manual(values = condition_colors) +
+  labs(
+    title = "ITPC Distribution by Experimental Condition",
+    x = "Z-normalized ITPC",
+    y = "Density",
+    fill = "Condition"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+## Boxplots by Condition
+
+```{r boxplots-condition, fig.width=10, fig.height=6}
+ggplot(itpc_data, aes(x = condition, y = value, fill = condition)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
+  facet_wrap(~type, ncol = 1, scales = "free_y") +
+  scale_fill_manual(values = condition_colors) +
+  labs(
+    title = "ITPC Values by Experimental Condition",
+    x = "Condition",
+    y = "Z-normalized ITPC"
+  ) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+## Violin Plots with Summary Statistics
+
+```{r violin-plots, fig.width=10, fig.height=8}
+ggplot(itpc_data, aes(x = P, y = value, fill = T)) +
+  geom_violin(alpha = 0.6, draw_quantiles = c(0.25, 0.5, 0.75)) +
+  geom_boxplot(width = 0.2, alpha = 0.8, position = position_dodge(0.9)) +
+  facet_wrap(~type, ncol = 1) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "ITPC Distribution: Period × Treatment Interaction",
+    x = "Period",
+    y = "Z-normalized ITPC",
+    fill = "Treatment"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+# Statistical Tests for Homogeneity
+
+## Levene's Test for Homogeneity of Variance
+
+```{r levene-test}
+# Levene's test by stimulus type
+levene_prestim <- itpc_data %>%
+  filter(type == "prestim_itpc") %>%
+  leveneTest(value ~ condition, data = .)
+
+levene_stim <- itpc_data %>%
+  filter(type == "stim_itpc") %>%
+  leveneTest(value ~ condition, data = .)
+
+cat("Levene's Test for Prestim ITPC:\n")
+print(levene_prestim)
+
+cat("\nLevene's Test for Stim ITPC:\n")
+print(levene_stim)
+
+# Interpretation
+cat("\nInterpretation:\n")
+cat("If p < 0.05: Variances are significantly different (pooling questionable)\n")
+cat("If p >= 0.05: Variances are homogeneous (pooling may be justified)\n")
+```
+
+## Bartlett's Test (parametric alternative)
+
+```{r bartlett-test}
+# Bartlett's test
+bartlett_prestim <- itpc_data %>%
+  filter(type == "prestim_itpc") %>%
+  bartlett.test(value ~ condition, data = .)
+
+bartlett_stim <- itpc_data %>%
+  filter(type == "stim_itpc") %>%
+  bartlett.test(value ~ condition, data = .)
+
+cat("Bartlett's Test for Prestim ITPC:\n")
+print(bartlett_prestim)
+
+cat("\nBartlett's Test for Stim ITPC:\n")
+print(bartlett_stim)
+```
+
+## Variance Ratio Analysis
+
+```{r variance-ratios}
+# Compute variance ratios across conditions
+variance_summary <- condition_summary %>%
+  group_by(type) %>%
+  summarise(
+    max_var = max(var),
+    min_var = min(var),
+    variance_ratio = max_var / min_var,
+    .groups = "drop"
+  )
+
+cat("Variance Ratios by Stimulus Type:\n")
+print(variance_summary)
+cat("\nRule of thumb: Variance ratio < 3 suggests reasonable homogeneity\n")
+```
+
+# Mixed Effects Model Approach
+
+## Fit Full Factorial Model
+
+```{r fit-lmer-model}
+library(lme4)
+library(lmerTest)
+
+# Fit mixed effects model with all interactions
+# Random effects: subject and ROI
+model_full <- itpc_data %>%
+  lmer(value ~ P * T * type + (1 | subject) + (1 | roi), data = .)
+
+# Model summary
+summary(model_full)
+```
+
+## ANOVA Table
+
+```{r anova-table}
+# Type III ANOVA
+anova(model_full, type = "III")
+```
+
+## Estimated Marginal Means
+
+```{r emmeans-analysis}
+# Estimated marginal means for each condition
+emm_condition <- emmeans(model_full, ~ P * T * type)
+print(emm_condition)
+
+# Pairwise comparisons
+cat("\nPairwise Comparisons (P × T within each stimulus type):\n")
+pairs(emmeans(model_full, ~ P * T | type), adjust = "tukey")
+```
+
+# Interaction Plots
+
+```{r interaction-plots, fig.width=12, fig.height=6}
+# Extract estimated marginal means
+emm_df <- as.data.frame(emm_condition)
+
+# Plot 1: P × T interaction by stimulus type
+p1 <- ggplot(emm_df, aes(x = P, y = emmean, color = T, group = T)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.1) +
+  facet_wrap(~type) +
+  scale_color_brewer(palette = "Set1") +
+  labs(
+    title = "Period × Treatment Interaction",
+    x = "Period",
+    y = "Estimated Marginal Mean (ITPC)",
+    color = "Treatment"
+  ) +
+  theme(legend.position = "bottom")
+
+# Plot 2: P × type interaction by treatment
+p2 <- ggplot(emm_df, aes(x = P, y = emmean, color = type, group = type)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.1) +
+  facet_wrap(~T) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(
+    title = "Period × Stimulus Type Interaction",
+    x = "Period",
+    y = "Estimated Marginal Mean (ITPC)",
+    color = "Stimulus Type"
+  ) +
+  theme(legend.position = "bottom")
+
+p1 
+```
+
+# Intraclass Correlation Coefficients
+
+```{r icc-analysis}
+library(performance)
+
+# ICC for subject and ROI
+icc_results <- icc(model_full)
+print(icc_results)
+
+cat("\nInterpretation:\n")
+cat("ICC close to 0: Little clustering (pooling across subjects/ROIs justified)\n")
+cat("ICC close to 1: Strong clustering (need hierarchical modeling)\n")
+```
+
+# Bayesian Approach to Heterogeneity
+
+## Fit Bayesian Model with Varying Intercepts
+
+```{r fit-brms-model, cache=TRUE, results='hide'}
+# Fit Bayesian mixed effects model
+# This allows us to quantify uncertainty in variance components
+bayes_model <- brm(
+  value ~ P * T * type + (1 | subject) + (1 | roi),
+  data = itpc_data,
+  family = gaussian(),
+  prior = c(
+    prior(normal(0, 2), class = Intercept),
+    prior(normal(0, 1), class = b),
+    prior(student_t(3, 0, 2.5), class = sd),
+    prior(student_t(3, 0, 2.5), class = sigma)
+  ),
+  chains = 4,
+  iter = 2000,
+  warmup = 1000,
+  cores = 4,
+  seed = 123,
+  backend = "cmdstanr",
+  silent = 2,
+  refresh = 0
+)
+```
+
+```{r bayes-summary}
+# Model summary
+summary(bayes_model)
+```
+
+## Posterior Predictive Checks
+
+```{r pp-checks, fig.width=10, fig.height=6}
+# Posterior predictive checks
+pp_check(bayes_model, ndraws = 100) +
+  labs(title = "Posterior Predictive Check")
+
+# By condition
+pp_check(bayes_model, type = "stat_grouped", group = "condition", stat = "mean") +
+  labs(title = "Posterior Predictive Check: Mean by Condition")
+```
+
+## Extract Fixed Effects Posteriors
+
+```{r bayes-effects}
+# Extract posterior samples for fixed effects
+fixed_effects <- bayes_model %>%
+  as_draws_df() %>%
+  select(starts_with("b_")) %>%
+  pivot_longer(everything(), names_to = "parameter", values_to = "value")
+
+# Plot posterior distributions of interaction effects
+ggplot(fixed_effects %>% filter(str_detect(parameter, ":")),
+       aes(x = value, y = parameter)) +
+  stat_halfeye(.width = c(0.8, 0.95)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  labs(
+    title = "Posterior Distributions of Interaction Effects",
+    x = "Effect Size",
+    y = "Parameter"
+  )
+```
+
+# Test Specific Pooling Hypotheses
+
+## Can we pool across Period (pre/post)?
+
+```{r test-period-pooling}
+# Test if Period main effect and interactions are negligible
+period_tests <- hypothesis(
+  bayes_model,
+  c("Ppost = 0",
+    "Ppost:Tsham = 0",
+    "Ppost:typestim_itpc = 0",
+    "Ppost:Tsham:typestim_itpc = 0")
+)
+
+print(period_tests)
+
+cat("\nInterpretation:\n")
+cat("Evidence Ratio > 3: Moderate evidence AGAINST pooling\n")
+cat("Evidence Ratio < 1/3: Moderate evidence FOR pooling\n")
+```
+
+## Can we pool across Treatment (real/sham)?
+
+```{r test-treatment-pooling}
+# Test if Treatment main effect and interactions are negligible
+treatment_tests <- hypothesis(
+  bayes_model,
+  c("Tsham = 0",
+    "Ppost:Tsham = 0",
+    "Tsham:typestim_itpc = 0",
+    "Ppost:Tsham:typestim_itpc = 0")
+)
+
+print(treatment_tests)
+```
+
+## Can we pool across Stimulus Type (prestim/stim)?
+
+```{r test-type-pooling}
+# Test if Stimulus Type main effect and interactions are negligible
+type_tests <- hypothesis(
+  bayes_model,
+  c("typestim_itpc = 0",
+    "Ppost:typestim_itpc = 0",
+    "Tsham:typestim_itpc = 0",
+    "Ppost:Tsham:typestim_itpc = 0")
+)
+
+print(type_tests)
+```
+
+# Subject-Level Heterogeneity Analysis
+
+```{r subject-heterogeneity, fig.width=12, fig.height=8}
+# Compute subject-level means by condition
+subject_means <- itpc_data %>%
+  group_by(subject, P, T, type) %>%
+  summarise(mean_itpc = mean(value, na.rm = TRUE), .groups = "drop")
+
+# Plot subject trajectories
+ggplot(subject_means, aes(x = P, y = mean_itpc, group = subject, color = subject)) +
+  geom_line(alpha = 0.6) +
+  geom_point(alpha = 0.8) +
+  facet_grid(type ~ T) +
+  labs(
+    title = "Individual Subject Trajectories by Condition",
+    x = "Period",
+    y = "Mean ITPC",
+    color = "Subject"
+  ) +
+  theme(legend.position = "right")
+```
+
+# ROI-Level Heterogeneity Analysis
+
+```{r roi-heterogeneity, fig.width=10, fig.height=6}
+# Compute variance of ITPC across conditions for each ROI
+roi_variance <- itpc_data %>%
+  group_by(roi, type) %>%
+  summarise(
+    var_itpc = var(value, na.rm = TRUE),
+    mean_itpc = mean(value, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Plot variance distribution across ROIs
+ggplot(roi_variance, aes(x = var_itpc, fill = type)) +
+  geom_histogram(bins = 30, alpha = 0.7, position = "identity") +
+  facet_wrap(~type, ncol = 1) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Distribution of ITPC Variance Across ROIs",
+    x = "Variance",
+    y = "Count",
+    fill = "Stimulus Type"
+  )
+```
+
+# Correlation Analysis Between Conditions
+
+```{r condition-correlations, fig.width=10, fig.height=10}
+# Create wide format for correlation analysis
+itpc_wide <- itpc_data %>%
+  group_by(subject, roi, P, T, type) %>%
+  summarise(mean_itpc = mean(value, na.rm = TRUE), .groups = "drop") %>%
+  unite("condition_type", P, T, type, sep = "_") %>%
+  pivot_wider(names_from = condition_type, values_from = mean_itpc)
+
+# Compute correlations
+cor_matrix <- itpc_wide %>%
+  select(-subject, -roi) %>%
+  cor(use = "pairwise.complete.obs")
+
+# Heatmap
+library(corrplot)
+corrplot(cor_matrix, method = "color", type = "upper",
+         tl.col = "black", tl.srt = 45,
+         addCoef.col = "black", number.cex = 0.7,
+         title = "Correlation Matrix: ITPC Across Conditions",
+         mar = c(0, 0, 2, 0))
+```
+
+# Summary and Recommendations
+
+```{r summary-report}
+cat("=" %>% str_dup(70), "\n")
+cat("SUMMARY: ITPC DATA POOLABILITY ANALYSIS\n")
+cat("=" %>% str_dup(70), "\n\n")
+
+cat("1. VARIANCE HOMOGENEITY:\n")
+cat("   - Check Levene's and Bartlett's test p-values above\n")
+cat("   - Check variance ratios (should be < 3 for pooling)\n\n")
+
+cat("2. INTERACTION EFFECTS:\n")
+cat("   - Significant interactions suggest conditions differ\n")
+cat("   - Check ANOVA table and Bayesian hypothesis tests\n\n")
+
+cat("3. HIERARCHICAL STRUCTURE:\n")
+cat("   - ICC values indicate clustering by subject and ROI\n")
+cat("   - Mixed models account for this structure\n\n")
+
+cat("4. RECOMMENDATIONS:\n")
+cat("   Based on the analyses above:\n")
+cat("   \n")
+cat("   a) If interactions are significant:\n")
+cat("      → DO NOT pool across those factors\n")
+cat("      → Analyze conditions separately or model interactions\n")
+cat("   \n")
+cat("   b) If variances differ substantially:\n")
+cat("      → Consider variance-stabilizing transformations\n")
+cat("      → Use robust statistical methods\n")
+cat("   \n")
+cat("   c) Given the hierarchical structure:\n")
+cat("      → Always use mixed models with random effects\n")
+cat("      → Account for subject and ROI clustering\n")
+cat("   \n")
+cat("   d) Stimulus type (prestim vs stim) typically shows:\n")
+cat("      → Strong differences (fundamental to the design)\n")
+cat("      → Should NOT be pooled\n")
+cat("=" %>% str_dup(70), "\n")
+```
+
+# Session Info
+
+```{r session-info}
+sessionInfo()
+```

@@ -1,0 +1,253 @@
+---
+title: "test_if_conditions_can_be_merged"
+format: html
+---
+
+```{r}
+library(dplyr)
+library(conflicted)
+
+source(here::here("R/utils.R"))
+source(here::here("R/utils_viz.R"))
+
+
+itpc_data <- read_csv("../data/Destrieux_final_itpc.csv") %>%
+  dplyr::filter(type == "stim_itpc") %>%
+  dplyr::mutate(
+    subject = factor(subject),
+    roi = factor(roi),
+    task = factor(task),
+    P = factor(P, levels = c("pre", "post")),
+    T = factor(T, levels = c("real", "sham")),
+
+    # Create combined condition factor
+    condition = interaction(P, T, sep = "_")
+  ) %>% select(-c("task", "type"))
+
+# Display data structure
+glimpse(itpc_data)
+
+# Summary statistics
+summary(itpc_data$value)
+```
+```{r}
+# Difference-in-Differences 
+# Y = (Post_Real - Baseline_Real) - (Post_Sham - Baseline_Sham)
+
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+# Your current data
+# itpc_data has: subject, roi, task, P, T, type, value, condition
+
+# Step 1: Reshape from long to wide format
+itpc_wide <- itpc_data %>%
+  # Create a combined condition label
+  mutate(condition = paste(P, T, sep = "_")) %>%
+  # Select only the columns we need
+  select(subject, roi, condition, value) %>%
+  # Pivot wider so each condition becomes a column
+  pivot_wider(
+    names_from = condition,
+    values_from = value
+  )
+
+# Check the structure
+glimpse(itpc_wide)
+# Should have columns: subject, roi, pre_real, pre_sham, post_real, post_sham
+
+# Step 2: Calculate difference-in-differences
+rba_data <- itpc_wide %>%
+  mutate(
+    # Calculate change for Real tDCS
+    real_change = post_real - pre_real,
+    
+    # Calculate change for Sham
+    sham_change = post_sham - pre_sham,
+    
+    # Calculate difference-in-differences (your Y variable)
+    Y = real_change - sham_change,
+    
+    # Optional: calculate average baseline for covariate
+    baseline_avg = (pre_real + pre_sham) / 2
+  ) %>%
+  # Select columns for RBA
+  select(Subj = subject, ROI = roi, Y, baseline_avg) %>%
+  # Remove any rows with missing values
+  dplyr::filter(!is.na(Y))
+
+# Step 3: Check your data
+summary(rba_data)
+head(rba_data, 20)
+
+# Check for any issues
+cat("Number of subjects:", length(unique(rba_data$Subj)), "\n")
+cat("Number of ROIs:", length(unique(rba_data$ROI)), "\n")
+cat("Total rows:", nrow(rba_data), "\n")
+
+
+```
+```{r}
+# Create visualization to check the contrast
+library(ggplot2)
+
+# Calculate group-level statistics for each ROI
+roi_summary <- rba_data %>%
+  group_by(ROI) %>%
+  summarise(
+    mean_Y = mean(Y, na.rm = TRUE),
+    sd_Y = sd(Y, na.rm = TRUE),
+    n = n()
+  ) %>%
+  arrange(desc(mean_Y))
+
+# Plot distribution of Y values by ROI (top 10 ROIs)
+top_rois <- roi_summary %>% slice_head(n = 10) %>% pull(ROI)
+
+rba_data %>%
+  dplyr::filter(ROI %in% top_rois) %>%
+  ggplot(aes(x = ROI, y = Y)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Difference-in-Differences by ROI (Top 10)",
+    subtitle = "Y = (Post_Real - Pre_Real) - (Post_Sham - Pre_Sham)",
+    x = "Region of Interest",
+    y = "Differential Change (Real - Sham)"
+  )
+```
+
+
+
+```{r}
+work_folder <- here::here("notebooks")
+model_name <- "diff_y_baseline"
+table_name <- glue::glue("{model_name}_data.txt")
+data_file <-glue::glue("{work_folder}/{table_name}")  # Using a data file with a space
+
+output_dir <- glue::glue("{work_folder}/results/{model_name}/{model_name}") # Using a path with a space
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Step 0: Export for RBA
+write.table(
+  rba_data,
+  file = data_file ,
+  sep = "\t",
+  row.names = FALSE,
+  quote = FALSE
+)
+
+# --- 1. Define variables (as you had before) ---
+
+model <- 'Y~1+baseline_avg+(1|Subj)+(1|ROI)'
+chains <- 4
+iterations <- 4000
+dist_y <- "student"
+
+# --- 2. Construct paths safely ---
+# Use file.path() instead of paste() with "/"
+#prefix_path <- file.path(full_output_dir, model_name)
+
+# --- 3. Define the command and its arguments ---
+command <- "RBA"
+
+# Each "word" the shell would see is its own element
+args <- c(
+  "-prefix",output_dir,
+  "-chains", chains,
+  "-iterations", iterations,
+  "-mean", model,
+  "-EOI", "Intercept",   # The single quotes aren't needed here
+  "-ridgePlot", "10", "8", # "10" and "8" are two separate args
+  "-distY", dist_y,
+  "-dataTable",
+  data_file
+)
+
+# --- 4. Run the command ---
+# system2() is the modern and safe way to run commands.
+# It handles all the quoting for you.
+
+# If you just want to see the command string (e.g., for logging):
+# You can paste the quoted arguments together
+cat(command, paste(shQuote(args), collapse = " "))
+
+#Wrap the call in tryCatch
+result <- tryCatch({
+  
+  # --- 1. TRY ---
+  # This code will run first.
+  message("Attempting to run command...")
+processx::run(command, args)
+  
+}, error = function(e) {
+  
+  # --- 2. CATCH ---
+  # This code runs ONLY if processx::run() throws an error.
+  message("Command failed!")
+  
+  # 'e' is the error object. For processx errors, 'e$stderr'
+  # usually holds the error message from the external command.
+  message("Error message from subprocess (stderr):")
+  cat(e$stderr)
+  
+  # Return a value (like NULL or FALSE) to signal failure
+  return(NULL)
+})
+
+# Output:
+# RBA "-prefix" "results/my model/run_01" "-chains" "4" "-iterations" "2000" ...
+
+  # Move ridge plot if it exists
+  ridge_file <- "Intercept_ridge.png"
+  if (file.exists(ridge_file)) {
+    fs::file_move(
+      ridge_file,
+      glue::glue( glue::glue("{work_folder}/results/{model_name}/{model_name}_intercept_ridge.png"))
+    )
+  }
+```
+```{r}
+library(here)
+library(glue)
+source(here::here("R/rba_helpers.R"))
+
+# Step 1: Prepare and save data
+work_folder <- here("notebooks")
+model_name <- "diff_y_baseline"
+
+data_file <- save_rba_data(
+  data = rba_data,
+  model_name = model_name,
+  work_folder = work_folder
+)
+
+# Step 2: Run RBA
+output_files <- run_rba(
+  data_file = data_file,
+  model_name = model_name,
+  model = "1+baseline_avg",
+  work_folder = work_folder,
+  chains = 4,
+  iterations = 4000,
+  dist_y = "student",
+  eoi = "Intercept,baseline_avg",
+  qvars = "baseline_avg",
+  stdz = "baseline_avg"
+)
+
+# Output files are automatically organized
+#print(output_files)
+```
+
+
+
+
+
+

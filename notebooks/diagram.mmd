@@ -1,0 +1,21 @@
+graph TD
+    A[Neural Power Spectrum<br/>PSD Analysis] --> B[1/f Component]
+    A --> C[Oscillatory Peaks]
+    
+    B --> D[Spectral Exponent χ]
+    B --> E[Offset b]
+    
+    D --> F[Steeper Slope<br/>Higher χ]
+    
+    G[40-Hz ASSR<br/>Auditory Stimulation] --> H[Phase-Locking]
+    
+    H --> I[ITPC Measurement<br/>Phase Coherence 0-1]
+    
+    F -.Positive Relationship.-> I
+    
+    J[E/I Balance] -.May Reflect.-> F
+    J -.May Reflect.-> I
+    
+    style F fill:#e1f5ff
+    style I fill:#ffe1f5
+    style J fill:#fff4e1
